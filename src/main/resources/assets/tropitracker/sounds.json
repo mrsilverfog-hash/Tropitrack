@@ -1,0 +1,18 @@
+{
+  "legendary_spawn": {
+    "category": "master",
+    "sounds": [{ "name": "tropitracker:legendary_spawn", "stream": false }]
+  },
+  "shiny_spawn": {
+    "category": "master",
+    "sounds": [{ "name": "tropitracker:shiny_spawn", "stream": false }]
+  },
+  "paradox_spawn": {
+    "category": "master",
+    "sounds": [{ "name": "tropitracker:paradox_spawn", "stream": false }]
+  },
+  "included_spawn": {
+    "category": "master",
+    "sounds": [{ "name": "tropitracker:included_spawn", "stream": false }]
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "tropitracker",
+  "version": "${version}",
+  "name": "TropiTracker",
+  "description": "Notifie avec un son quand un Pokémon spécial apparaît (Légendaire, Shiny, Paradoxe, Mystique, Ultra-Beast) avec les noms français.",
+  "authors": ["Tropimon"],
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "net.tropimon.tropitracker.TropiTrackerClient"
+    ]
+  },
+  "mixins": ["tropitracker.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.1",
+    "cobblemon": "*"
+  }
+}
