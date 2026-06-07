@@ -25,6 +25,8 @@ jobs:
 
       - name: Compiler le mod
         run: gradle build
+        env:
+          GRADLE_OPTS: "-Xmx4g -Xms1g"
 
       - name: Publier le .jar
         uses: actions/upload-artifact@v4
