@@ -24,11 +24,10 @@ jobs:
           gradle-version: '8.8'
 
       - name: Compiler le mod
-        working-directory: tropitracker
         run: gradle build
 
       - name: Publier le .jar
         uses: actions/upload-artifact@v4
         with:
           name: tropitracker-jar
-          path: tropitracker/build/libs/tropitracker-*.jar
+          path: build/libs/tropitracker-*.jar
