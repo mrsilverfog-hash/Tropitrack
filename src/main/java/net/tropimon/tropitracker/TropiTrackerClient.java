@@ -82,9 +82,14 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
-            // Ignorer les Pokémon appartenant à un joueur
-            if (pokemonEntity.getPokemon().getOwnerUUID() != null) return;
-            handleSpawn(pokemonEntity.getPokemon());
+            Pokemon poke = pokemonEntity.getPokemon();
+            // Ignorer les Pokémon qui ont un propriétaire (capturés)
+            if (poke.getOwnerUUID() != null) return;
+            // Ignorer les Pokémon qui ont été capturés (ont une Poké Ball assignée)
+            try {
+                if (poke.getCaughtBall() != null) return;
+            } catch (Exception ignored) {}
+            handleSpawn(poke);
         });
 
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
