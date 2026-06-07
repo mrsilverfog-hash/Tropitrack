@@ -9,7 +9,7 @@ import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
-import net.minecraft.sound.SoundCategory;
+import net.minecraft.entity.Entity;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -36,8 +36,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     private static final Set<String> trackedPokemons = new HashSet<>();
 
-    // Son en boucle : on rejoue toutes les X ticks si un Pokémon suivi est visible
-    private static final int LOOP_INTERVAL = 60; // 3 secondes
+    private static final int LOOP_INTERVAL = 60;
     private static int loopTick = 0;
     private static SoundEvent activeLoopSound = null;
     private static boolean loopActive = false;
@@ -57,12 +56,11 @@ public class TropiTrackerClient implements ClientModInitializer {
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "TropiTracker Mute",
             InputUtil.Type.KEYSYM,
-            186,
+            186, // ù sur clavier AZERTY
             "TropiTracker"
         ));
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            // Touche mute
             while (muteKey.wasPressed()) {
                 muted = !muted;
                 if (client.player != null) {
@@ -73,7 +71,6 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Boucle sonore
             if (loopActive && !muted && activeLoopSound != null && client.player != null) {
                 loopTick++;
                 if (loopTick >= LOOP_INTERVAL) {
@@ -83,39 +80,38 @@ public class TropiTrackerClient implements ClientModInitializer {
             }
         });
 
-        // Détecter les spawns
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
-            if (entity instanceof PokemonEntity pokemonEntity) {
-                // Ne traiter que les Pokémon sauvages (sans propriétaire)
-                if (pokemonEntity.getPokemon().getOwnerUUID() != null) return;
-                handleSpawn(pokemonEntity.getPokemon());
-            }
+            if (!(entity instanceof PokemonEntity pokemonEntity)) return;
+            // Ignorer les Pokémon appartenant à un joueur
+            if (pokemonEntity.getPokemon().getOwnerUUID() != null) return;
+            handleSpawn(pokemonEntity.getPokemon());
         });
 
-        // Détecter quand un Pokémon disparaît
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
-            if (entity instanceof PokemonEntity) {
-                // Vérifier si des Pokémon suivis sont encore présents
-                MinecraftClient client = MinecraftClient.getInstance();
-                if (client.world == null) return;
-                boolean stillPresent = client.world.getEntities()
-                    .stream()
-                    .anyMatch(e -> {
-                        if (e == entity || !(e instanceof PokemonEntity pe)) return false;
-                        String name = pe.getPokemon().getSpecies().getName().toLowerCase();
-                        String fr = FrenchNames.get(name);
-                        return trackedPokemons.contains(name) || 
-                               (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
-                               isSpecialPokemon(pe.getPokemon());
-                    });
-                if (!stillPresent) {
-                    loopActive = false;
-                    activeLoopSound = null;
+            if (!(entity instanceof PokemonEntity)) return;
+            MinecraftClient client = MinecraftClient.getInstance();
+            if (client.world == null) return;
+
+            // Vérifier si un Pokémon spécial est encore présent
+            boolean stillPresent = false;
+            for (Entity e : client.world.getEntities()) {
+                if (e == entity || !(e instanceof PokemonEntity pe)) continue;
+                if (pe.getPokemon().getOwnerUUID() != null) continue;
+                String name = pe.getPokemon().getSpecies().getName().toLowerCase();
+                String fr = FrenchNames.get(name);
+                if (trackedPokemons.contains(name) ||
+                    (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
+                    isSpecialPokemon(pe.getPokemon())) {
+                    stillPresent = true;
+                    break;
                 }
             }
+            if (!stillPresent) {
+                loopActive = false;
+                activeLoopSound = null;
+            }
         });
 
-        // Commande track dans le chat
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
             if (message.toLowerCase().startsWith("track ")) {
                 String pokemonName = message.substring(6).trim().toLowerCase();
@@ -166,15 +162,12 @@ public class TropiTrackerClient implements ClientModInitializer {
         SoundEvent sound = null;
         String message = null;
 
-        // Pokémon suivi personnellement
         String frLower = frenchName.toLowerCase();
         if (!trackedPokemons.isEmpty() &&
             (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
             sound = INCLUDED_SOUND;
             message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
-        }
-        // Catégories spéciales
-        else if (isShiny && enableShiny) {
+        } else if (isShiny && enableShiny) {
             sound = SHINY_SOUND;
             message = "§6✨ Pokémon Shiny apparu : §e" + frenchName + " §6✨";
         } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
@@ -192,14 +185,12 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
 
         if (sound != null && message != null) {
-            final SoundEvent finalSound = sound;
-            final String finalMessage = message;
-
-            // Activer la boucle sonore
-            activeLoopSound = finalSound;
+            activeLoopSound = sound;
             loopActive = true;
             loopTick = 0;
 
+            final SoundEvent finalSound = sound;
+            final String finalMessage = message;
             if (!muted) {
                 client.execute(() -> {
                     client.player.sendMessage(Text.literal(finalMessage), false);
@@ -211,11 +202,15 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     private boolean isSpecialPokemon(Pokemon pokemon) {
         Set<String> labels = pokemon.getSpecies().getLabels();
+        String name = pokemon.getSpecies().getName().toLowerCase();
+        String fr = FrenchNames.get(name);
         return pokemon.getShiny() ||
                hasLabel(labels, LEGENDARY_LABELS) ||
                hasLabel(labels, MYTHIC_LABELS) ||
                hasLabel(labels, ULTRA_BEAST_LABELS) ||
-               hasLabel(labels, PARADOX_LABELS);
+               hasLabel(labels, PARADOX_LABELS) ||
+               trackedPokemons.contains(name) ||
+               (fr != null && trackedPokemons.contains(fr.toLowerCase()));
     }
 
     private boolean hasLabel(Set<String> labels, Set<String> targets) {
