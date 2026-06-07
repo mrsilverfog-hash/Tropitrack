@@ -138,6 +138,9 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         if (trackedPokemons.contains(name)) {
             trackedPokemons.remove(name);
+            // Arrêter le son en boucle
+            loopActive = false;
+            activeLoopSound = null;
             client.player.sendMessage(
                 Text.literal("§cTropiTracker : §f" + capitalize(name) + " §cretiré de la liste."),
                 false
