@@ -57,7 +57,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "TropiTracker Mute",
             InputUtil.Type.KEYSYM,
-            96,
+            186,
             "TropiTracker"
         ));
 
@@ -86,6 +86,8 @@ public class TropiTrackerClient implements ClientModInitializer {
         // Détecter les spawns
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (entity instanceof PokemonEntity pokemonEntity) {
+                // Ne traiter que les Pokémon sauvages (sans propriétaire)
+                if (pokemonEntity.getPokemon().getOwnerUUID() != null) return;
                 handleSpawn(pokemonEntity.getPokemon());
             }
         });
