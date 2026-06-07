@@ -35,6 +35,8 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static boolean enableShiny      = true;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
+    // UUID des entités déjà notifiées pour éviter les doublons
+    private static final Set<java.util.UUID> seenEntities = new HashSet<>();
 
     private static final int LOOP_INTERVAL = 60;
     private static int loopTick = 0;
@@ -83,17 +85,21 @@ public class TropiTrackerClient implements ClientModInitializer {
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
             Pokemon poke = pokemonEntity.getPokemon();
-            // Ignorer les Pokémon qui ont un propriétaire (capturés)
-            if (poke.getOwnerUUID() != null) return;
-            // Ignorer les Pokémon qui ont été capturés (ont une Poké Ball assignée)
-            try {
-                if (poke.getCaughtBall() != null) return;
-            } catch (Exception ignored) {}
+            // Ignorer les Pokémon qui appartiennent à un autre joueur (pas sauvages)
+            // On garde ceux du joueur local et les sauvages (ownerUUID null)
+            MinecraftClient mc = MinecraftClient.getInstance();
+            java.util.UUID ownerUUID = poke.getOwnerUUID();
+            if (ownerUUID != null && (mc.player == null || !ownerUUID.equals(mc.player.getUuid()))) return;
+            // Ignorer si déjà notifié (rechargement de chunk)
+            java.util.UUID entityUUID = pokemonEntity.getUuid();
+            if (seenEntities.contains(entityUUID)) return;
+            seenEntities.add(entityUUID);
             handleSpawn(poke);
         });
 
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity)) return;
+            seenEntities.remove(entity.getUuid());
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world == null) return;
 
