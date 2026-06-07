@@ -1,15 +1,15 @@
 package net.tropimon.tropitracker;
 
-import com.cobblemon.mod.common.api.Priority;
-import com.cobblemon.mod.common.api.events.CobblemonEvents;
-import com.cobblemon.mod.common.api.events.pokemon.PokemonEntitySpawnEvent;
+import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import com.cobblemon.mod.common.pokemon.Pokemon;
 import net.fabricmc.api.ClientModInitializer;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
+import net.minecraft.entity.Entity;
 import net.minecraft.sound.SoundEvent;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
@@ -27,16 +27,16 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static SoundEvent PARADOX_SOUND;
     public static SoundEvent INCLUDED_SOUND;
 
-    public static boolean enableLegendary = true;
-    public static boolean enableMythic = true;
+    public static boolean enableLegendary  = true;
+    public static boolean enableMythic     = true;
     public static boolean enableUltraBeast = true;
-    public static boolean enableParadox = true;
-    public static boolean enableShiny = true;
+    public static boolean enableParadox    = true;
+    public static boolean enableShiny      = true;
 
-    private static final Set<String> LEGENDARY_LABELS  = Set.of("legendary");
-    private static final Set<String> MYTHIC_LABELS     = Set.of("mythical");
+    private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
+    private static final Set<String> MYTHIC_LABELS      = Set.of("mythical");
     private static final Set<String> ULTRA_BEAST_LABELS = Set.of("ultra_beast");
-    private static final Set<String> PARADOX_LABELS    = Set.of("paradox");
+    private static final Set<String> PARADOX_LABELS     = Set.of("paradox");
 
     @Override
     public void onInitializeClient() {
@@ -64,14 +64,12 @@ public class TropiTrackerClient implements ClientModInitializer {
             }
         });
 
-        // Abonnement correct à l'event Cobblemon
-        CobblemonEvents.POKEMON_ENTITY_SPAWN.subscribe(
-            Priority.NORMAL,
-            (PokemonEntitySpawnEvent event) -> {
-                handleSpawn(event.getEntity().getPokemon());
-                return kotlin.Unit.INSTANCE;
+        // Écouter le spawn d'entités via Fabric et filtrer les PokemonEntity
+        ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
+            if (entity instanceof PokemonEntity pokemonEntity) {
+                handleSpawn(pokemonEntity.getPokemon());
             }
-        );
+        });
     }
 
     private void handleSpawn(Pokemon pokemon) {
