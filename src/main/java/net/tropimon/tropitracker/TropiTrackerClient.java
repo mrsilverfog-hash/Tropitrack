@@ -85,11 +85,10 @@ public class TropiTrackerClient implements ClientModInitializer {
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
             Pokemon poke = pokemonEntity.getPokemon();
-            // Ignorer les Pokémon qui appartiennent à un autre joueur (pas sauvages)
-            // On garde ceux du joueur local et les sauvages (ownerUUID null)
-            MinecraftClient mc = MinecraftClient.getInstance();
-            java.util.UUID ownerUUID = poke.getOwnerUUID();
-            if (ownerUUID != null && (mc.player == null || !ownerUUID.equals(mc.player.getUuid()))) return;
+            // Ignorer les Pokémon qui appartiennent à quelqu'un (joueur ou NPC)
+            if (poke.getOwnerUUID() != null) return;
+            // Ignorer les Pokémon en combat contre un dresseur NPC
+            if (pokemonEntity.getBattleId() != null) return;
             // Ignorer si déjà notifié (rechargement de chunk)
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID)) return;
