@@ -85,18 +85,8 @@ public class TropiTrackerClient implements ClientModInitializer {
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
             Pokemon poke = pokemonEntity.getPokemon();
-            // Ignorer les Pokémon qui appartiennent à quelqu'un (joueur)
+            // Ignorer tous les Pokémon qui ont un propriétaire (joueurs et NPCs)
             if (poke.getOwnerUUID() != null) return;
-            // Un Pokémon sauvage n'a pas de Poké Ball assignée
-            // Les Pokémon de dresseurs NPC en ont une
-            try {
-                var ball = poke.getCaughtBall();
-                if (ball != null && !ball.getName().getPath().equals("poke_ball")) {
-                    // a une ball spécifique = capturé par quelqu'un
-                }
-                // Si la ball existe, c'est qu'il a été capturé = pas sauvage
-                if (ball != null) return;
-            } catch (Exception ignored) {}
             // Ignorer si déjà notifié (rechargement de chunk)
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID)) return;
