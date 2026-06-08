@@ -87,6 +87,8 @@ public class TropiTrackerClient implements ClientModInitializer {
             Pokemon poke = pokemonEntity.getPokemon();
             // Ignorer tous les Pokémon qui ont un propriétaire (joueurs et NPCs)
             if (poke.getOwnerUUID() != null) return;
+            // Ignorer les Pokémon en combat
+            if (pokemonEntity.getBattleId() != null) return;
             // Ignorer si déjà notifié (rechargement de chunk)
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID)) return;
