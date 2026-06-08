@@ -84,16 +84,22 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
-            Pokemon poke = pokemonEntity.getPokemon();
-            // Ignorer tous les Pokémon qui ont un propriétaire (joueurs et NPCs)
-            if (poke.getOwnerUUID() != null) return;
-            // Ignorer les Pokémon en combat
-            if (pokemonEntity.getBattleId() != null) return;
-            // Ignorer si déjà notifié (rechargement de chunk)
+            // Attendre 5 ticks pour que Cobblemon assigne le propriétaire
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID)) return;
             seenEntities.add(entityUUID);
-            handleSpawn(poke);
+            MinecraftClient.getInstance().execute(() -> {
+                // Vérifier après un délai
+                new Thread(() -> {
+                    try { Thread.sleep(250); } catch (Exception ignored) {}
+                    MinecraftClient.getInstance().execute(() -> {
+                        Pokemon poke = pokemonEntity.getPokemon();
+                        if (poke.getOwnerUUID() != null) return;
+                        if (pokemonEntity.getBattleId() != null) return;
+                        handleSpawn(poke);
+                    });
+                }).start();
+            });
         });
 
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
