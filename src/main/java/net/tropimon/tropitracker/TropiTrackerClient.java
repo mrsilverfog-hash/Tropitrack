@@ -15,6 +15,7 @@ import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -37,6 +38,10 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static final Set<String> trackedPokemons = new HashSet<>();
     // UUID des entités déjà notifiées pour éviter les doublons
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
+    // Entités en attente de vérification (délai de 2 secondes)
+    private static final java.util.Map<java.util.UUID, PokemonEntity> pendingEntities = new java.util.HashMap<>();
+    private static final java.util.Map<java.util.UUID, Integer> pendingTicks = new java.util.HashMap<>();
+    private static final int CHECK_DELAY = 40; // 2 secondes
 
     private static final int LOOP_INTERVAL = 60;
     private static int loopTick = 0;
@@ -73,6 +78,27 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
+            // Vérifier les entités en attente
+            if (!pendingEntities.isEmpty() && client.world != null) {
+                java.util.List<java.util.UUID> toRemove = new java.util.ArrayList<>();
+                for (java.util.Map.Entry<java.util.UUID, PokemonEntity> entry : pendingEntities.entrySet()) {
+                    int ticks = pendingTicks.getOrDefault(entry.getKey(), 0) + 1;
+                    pendingTicks.put(entry.getKey(), ticks);
+                    if (ticks >= CHECK_DELAY) {
+                        toRemove.add(entry.getKey());
+                        PokemonEntity pe = entry.getValue();
+                        Pokemon poke = pe.getPokemon();
+                        if (poke.getOwnerUUID() == null && pe.getBattleId() == null) {
+                            handleSpawn(poke);
+                        }
+                    }
+                }
+                for (java.util.UUID uuid : toRemove) {
+                    pendingEntities.remove(uuid);
+                    pendingTicks.remove(uuid);
+                }
+            }
+
             if (loopActive && !muted && activeLoopSound != null && client.player != null) {
                 loopTick++;
                 if (loopTick >= LOOP_INTERVAL) {
@@ -84,22 +110,11 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
-            // Attendre 5 ticks pour que Cobblemon assigne le propriétaire
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID)) return;
             seenEntities.add(entityUUID);
-            MinecraftClient.getInstance().execute(() -> {
-                // Vérifier après un délai
-                new Thread(() -> {
-                    try { Thread.sleep(250); } catch (Exception ignored) {}
-                    MinecraftClient.getInstance().execute(() -> {
-                        Pokemon poke = pokemonEntity.getPokemon();
-                        if (poke.getOwnerUUID() != null) return;
-                        if (pokemonEntity.getBattleId() != null) return;
-                        handleSpawn(poke);
-                    });
-                }).start();
-            });
+            // Ajouter à la file d'attente pour vérification différée
+            pendingEntities.put(entityUUID, pokemonEntity);
         });
 
         ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
