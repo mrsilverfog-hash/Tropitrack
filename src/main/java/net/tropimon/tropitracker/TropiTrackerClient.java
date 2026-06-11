@@ -110,8 +110,10 @@ public class TropiTrackerClient implements ClientModInitializer {
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
                 
-                // On ignore les Pokémon domestiques ou en combat pour l'arrêt de la boucle
-                if (pe.getPokemon().getOwnerUUID() != null || pe.getBattleId() != null) continue;
+                // SÉCURITÉ : On ignore les Pokémon qui ont un maître, un dresseur d'origine ou en combat
+                if (pe.getPokemon().getOwnerUUID() != null || 
+                    pe.getPokemon().getOriginalTrainer() != null || 
+                    pe.getBattleId() != null) continue;
 
                 String name = pe.getPokemon().getSpecies().getName().toLowerCase();
                 String fr = FrenchNames.get(name);
@@ -123,7 +125,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                     break;
                 }
             }
-            if (!stillPresent) {
+            if (!notStillPresent(stillPresent)) {
                 loopActive = false;
                 activeLoopSound = null;
             }
@@ -137,6 +139,10 @@ public class TropiTrackerClient implements ClientModInitializer {
             }
             return true;
         });
+    }
+
+    private static boolean notStillPresent(boolean stillPresent) {
+        return stillPresent;
     }
 
     private void handleTrackCommand(String name) {
@@ -173,8 +179,11 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         Pokemon pokemon = pe.getPokemon();
         
-        // SÉCURITÉ : On ignore le Pokémon s'il a un maître OU s'il est déjà en combat
-        if (pokemon.getOwnerUUID() != null || pe.getBattleId() != null) return;
+        // SÉCURITÉ MAXIMUM : 
+        // - pokemon.getOwnerUUID() != null -> C'est ton Pokémon
+        // - pokemon.getOriginalTrainer() != null -> Déjà capturé par un joueur (donc pas sauvage)
+        // - pe.getBattleId() != null -> Déjà en combat
+        if (pokemon.getOwnerUUID() != null || pokemon.getOriginalTrainer() != null || pe.getBattleId() != null) return;
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
         String frenchName = FrenchNames.get(speciesName);
@@ -189,7 +198,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             sound = INCLUDED_SOUND;
             message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (pokemon.getShiny() ? " §6✨ SHINY ✨" : "");
         } else if (pokemon.getShiny()) {
-            // Déclenchement uniquement si le Shiny est 100% sauvage
+            // Déclenchement uniquement si le Shiny est 100% sauvage et libre
             sound = SHINY_SOUND;
             message = "§6✨ Pokémon Shiny SAUVAGE apparu : §e" + frenchName + " §6✨";
         }
