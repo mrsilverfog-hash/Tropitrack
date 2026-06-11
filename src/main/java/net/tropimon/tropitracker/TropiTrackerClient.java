@@ -24,6 +24,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static KeyBinding muteKey;
     private static boolean muted = false;
 
+    public static SoundEvent SHINY_SOUND;
     public static SoundEvent INCLUDED_SOUND;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
@@ -41,6 +42,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     @Override
     public void onInitializeClient() {
+        SHINY_SOUND     = SoundEvent.of(Identifier.of("tropitracker", "shiny_spawn"));
         INCLUDED_SOUND  = SoundEvent.of(Identifier.of("tropitracker", "included_spawn"));
 
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -70,10 +72,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                     if (ticks >= CHECK_DELAY) {
                         toRemove.add(entry.getKey());
                         PokemonEntity pe = entry.getValue();
-                        Pokemon poke = pe.getPokemon();
-                        if (poke.getOwnerUUID() == null && pe.getBattleId() == null) {
-                            handleSpawn(poke);
-                        }
+                        handleSpawn(pe);
                     }
                 }
                 for (java.util.UUID uuid : toRemove) {
@@ -106,15 +105,20 @@ public class TropiTrackerClient implements ClientModInitializer {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world == null) return;
 
-            // Vérifier si un Pokémon suivi est encore présent autour de nous
+            // Vérifier si un Pokémon suivi ou un Shiny sauvage est encore présent autour de nous
             boolean stillPresent = false;
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
-                if (pe.getPokemon().getOwnerUUID() != null) continue;
+                
+                // On ignore les Pokémon domestiques ou en combat pour l'arrêt de la boucle
+                if (pe.getPokemon().getOwnerUUID() != null || pe.getBattleId() != null) continue;
+
                 String name = pe.getPokemon().getSpecies().getName().toLowerCase();
                 String fr = FrenchNames.get(name);
-                if (trackedPokemons.contains(name) ||
-                    (fr != null && trackedPokemons.contains(fr.toLowerCase()))) {
+                
+                if (trackedPokemons.contains(name) || 
+                    (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
+                    pe.getPokemon().getShiny()) {
                     stillPresent = true;
                     break;
                 }
@@ -141,7 +145,6 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         if (trackedPokemons.contains(name)) {
             trackedPokemons.remove(name);
-            // Arrêter le son en boucle
             loopActive = false;
             activeLoopSound = null;
             client.player.sendMessage(
@@ -164,9 +167,14 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
-    private void handleSpawn(Pokemon pokemon) {
+    private void handleSpawn(PokemonEntity pe) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
+
+        Pokemon pokemon = pe.getPokemon();
+        
+        // SÉCURITÉ : On ignore le Pokémon s'il a un maître OU s'il est déjà en combat
+        if (pokemon.getOwnerUUID() != null || pe.getBattleId() != null) return;
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
         String frenchName = FrenchNames.get(speciesName);
@@ -179,7 +187,11 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!trackedPokemons.isEmpty() &&
             (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
             sound = INCLUDED_SOUND;
-            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName;
+            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (pokemon.getShiny() ? " §6✨ SHINY ✨" : "");
+        } else if (pokemon.getShiny()) {
+            // Déclenchement uniquement si le Shiny est 100% sauvage
+            sound = SHINY_SOUND;
+            message = "§6✨ Pokémon Shiny SAUVAGE apparu : §e" + frenchName + " §6✨";
         }
 
         if (sound != null && message != null) {
