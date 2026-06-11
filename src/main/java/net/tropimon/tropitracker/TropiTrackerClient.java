@@ -24,16 +24,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static KeyBinding muteKey;
     private static boolean muted = false;
 
-    public static SoundEvent LEGENDARY_SOUND;
-    public static SoundEvent SHINY_SOUND;
-    public static SoundEvent PARADOX_SOUND;
     public static SoundEvent INCLUDED_SOUND;
-
-    public static boolean enableLegendary  = true;
-    public static boolean enableMythic     = true;
-    public static boolean enableUltraBeast = true;
-    public static boolean enableParadox    = true;
-    public static boolean enableShiny      = true;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
     // UUID des entités déjà notifiées pour éviter les doublons
@@ -48,16 +39,8 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static SoundEvent activeLoopSound = null;
     private static boolean loopActive = false;
 
-    private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
-    private static final Set<String> MYTHIC_LABELS      = Set.of("mythical");
-    private static final Set<String> ULTRA_BEAST_LABELS = Set.of("ultra_beast");
-    private static final Set<String> PARADOX_LABELS     = Set.of("paradox");
-
     @Override
     public void onInitializeClient() {
-        LEGENDARY_SOUND = SoundEvent.of(Identifier.of("tropitracker", "legendary_spawn"));
-        SHINY_SOUND     = SoundEvent.of(Identifier.of("tropitracker", "shiny_spawn"));
-        PARADOX_SOUND   = SoundEvent.of(Identifier.of("tropitracker", "paradox_spawn"));
         INCLUDED_SOUND  = SoundEvent.of(Identifier.of("tropitracker", "included_spawn"));
 
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -123,7 +106,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world == null) return;
 
-            // Vérifier si un Pokémon spécial est encore présent
+            // Vérifier si un Pokémon suivi est encore présent autour de nous
             boolean stillPresent = false;
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
@@ -131,8 +114,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 String name = pe.getPokemon().getSpecies().getName().toLowerCase();
                 String fr = FrenchNames.get(name);
                 if (trackedPokemons.contains(name) ||
-                    (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
-                    isSpecialPokemon(pe.getPokemon())) {
+                    (fr != null && trackedPokemons.contains(fr.toLowerCase()))) {
                     stillPresent = true;
                     break;
                 }
@@ -190,9 +172,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         String frenchName = FrenchNames.get(speciesName);
         if (frenchName == null) frenchName = pokemon.getSpecies().getName();
 
-        Set<String> labels = pokemon.getSpecies().getLabels();
-        boolean isShiny = pokemon.getShiny();
-
         SoundEvent sound = null;
         String message = null;
 
@@ -200,22 +179,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!trackedPokemons.isEmpty() &&
             (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
             sound = INCLUDED_SOUND;
-            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
-        } else if (isShiny && enableShiny) {
-            sound = SHINY_SOUND;
-            message = "§6✨ Pokémon Shiny apparu : §e" + frenchName + " §6✨";
-        } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
-            sound = LEGENDARY_SOUND;
-            message = "§c⚡ Légendaire apparu : §f" + frenchName + " §c⚡";
-        } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
-            sound = LEGENDARY_SOUND;
-            message = "§d✦ Mystique apparu : §f" + frenchName + " §d✦";
-        } else if (enableUltraBeast && hasLabel(labels, ULTRA_BEAST_LABELS)) {
-            sound = INCLUDED_SOUND;
-            message = "§b◆ Ultra-Chimère apparu : §f" + frenchName + " §b◆";
-        } else if (enableParadox && hasLabel(labels, PARADOX_LABELS)) {
-            sound = PARADOX_SOUND;
-            message = "§5⚔ Pokémon Paradoxe apparu : §f" + frenchName + " §5⚔";
+            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName;
         }
 
         if (sound != null && message != null) {
@@ -232,26 +196,6 @@ public class TropiTrackerClient implements ClientModInitializer {
                 });
             }
         }
-    }
-
-    private boolean isSpecialPokemon(Pokemon pokemon) {
-        Set<String> labels = pokemon.getSpecies().getLabels();
-        String name = pokemon.getSpecies().getName().toLowerCase();
-        String fr = FrenchNames.get(name);
-        return pokemon.getShiny() ||
-               hasLabel(labels, LEGENDARY_LABELS) ||
-               hasLabel(labels, MYTHIC_LABELS) ||
-               hasLabel(labels, ULTRA_BEAST_LABELS) ||
-               hasLabel(labels, PARADOX_LABELS) ||
-               trackedPokemons.contains(name) ||
-               (fr != null && trackedPokemons.contains(fr.toLowerCase()));
-    }
-
-    private boolean hasLabel(Set<String> labels, Set<String> targets) {
-        for (String label : labels) {
-            if (targets.contains(label.toLowerCase())) return true;
-        }
-        return false;
     }
 
     private String capitalize(String s) {
