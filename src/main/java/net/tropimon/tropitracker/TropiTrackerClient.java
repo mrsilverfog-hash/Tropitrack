@@ -1,4 +1,4 @@
-package net.tropimon.tropimon.tropitracker;
+package net.tropimon.tropitracker;
 
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import com.cobblemon.mod.common.pokemon.Pokemon;
@@ -46,7 +46,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static SoundEvent activeLoopSound = null;
     private static boolean loopActive = false;
 
-    // Variables pour gérer la sécurité anti-téléportation
+    // Variables de sécurité pour la téléportation
     private static int teleportGraceTicks = 0;
     private static net.minecraft.util.math.Vec3d lastPlayerPos = null;
     private static net.minecraft.client.world.ClientWorld lastWorld = null;
@@ -81,17 +81,16 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Détection du changement de serveur, de monde ou de téléportation
+            // Détection du changement de serveur ou de téléportation rapide
             if (client.player != null && client.world != null) {
                 if (lastWorld != client.world) {
-                    // Changement de serveur ou de dimension : 7 secondes de sécurité (140 ticks)
-                    teleportGraceTicks = 140;
+                    teleportGraceTicks = 140; // 7 secondes de sécurité au changement de serveur
                     lastWorld = client.world;
                     lastPlayerPos = client.player.getPos();
                 } else if (lastPlayerPos != null) {
-                    // Téléportation sur le même serveur (plus de 50 blocs d'un coup) : 5 secondes de sécurité (100 ticks)
+                    // Téléportation sur le même serveur (plus de 50 blocs d'un coup)
                     if (client.player.getPos().squaredDistanceTo(lastPlayerPos) > 2500) {
-                        teleportGraceTicks = 100;
+                        teleportGraceTicks = 100; // 5 secondes de sécurité
                     }
                     lastPlayerPos = client.player.getPos();
                 } else {
@@ -113,7 +112,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                         toRemove.add(entry.getKey());
                         PokemonEntity pe = entry.getValue();
                         Pokemon poke = pe.getPokemon();
-                        if (poke.isWild() && poke.getOwnerUUID() == null && pe.getBattleId() == null) {
+                        if (poke.getOwnerUUID() == null && pe.getBattleId() == null) {
                             handleSpawn(poke);
                         }
                     }
@@ -135,8 +134,8 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
-
-            // SÉCURITÉ : Si on vient de se téléporter ou de changer de serveur, on ignore l'entité
+            
+            // Si on vient de se téléporter, on ignore complètement l'entité
             if (teleportGraceTicks > 0) return;
 
             java.util.UUID entityUUID = pokemonEntity.getUuid();
@@ -154,14 +153,12 @@ public class TropiTrackerClient implements ClientModInitializer {
             boolean stillPresent = false;
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
-                Pokemon poke = pe.getPokemon();
-                if (!poke.isWild() || poke.getOwnerUUID() != null) continue;
-                
-                String name = poke.getSpecies().getName().toLowerCase();
+                if (pe.getPokemon().getOwnerUUID() != null) continue;
+                String name = pe.getPokemon().getSpecies().getName().toLowerCase();
                 String fr = FrenchNames.get(name);
                 if (trackedPokemons.contains(name) ||
                     (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
-                    isSpecialPokemon(poke)) {
+                    isSpecialPokemon(pe.getPokemon())) {
                     stillPresent = true;
                     break;
                 }
@@ -211,8 +208,6 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private void handleSpawn(Pokemon pokemon) {
-        if (!pokemon.isWild() || pokemon.getOwnerUUID() != null) return;
-
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
 
@@ -265,8 +260,6 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private boolean isSpecialPokemon(Pokemon pokemon) {
-        if (!pokemon.isWild() || pokemon.getOwnerUUID() != null) return false;
-
         Set<String> labels = pokemon.getSpecies().getLabels();
         String name = pokemon.getSpecies().getName().toLowerCase();
         String fr = FrenchNames.get(name);
