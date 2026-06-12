@@ -35,214 +35,123 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static boolean enableParadox    = true;
     public static boolean enableShiny      = true;
 
+    private static final Set<String> LEGENDARY_LABELS = Set.of("legendary");
+    private static final Set<String> MYTHIC_LABELS = Set.of("mythic");
+    private static final Set<String> ULTRA_BEAST_LABELS = Set.of("ultra_beast");
+    private static final Set<String> PARADOX_LABELS = Set.of("paradox");
     private static final Set<String> trackedPokemons = new HashSet<>();
-    private static final Set<java.util.UUID> seenEntities = new HashSet<>();
-    private static final java.util.Map<java.util.UUID, PokemonEntity> pendingEntities = new java.util.HashMap<>();
-    private static final java.util.Map<java.util.UUID, Integer> pendingTicks = new java.util.HashMap<>();
-    private static final int CHECK_DELAY = 40; // 2 secondes
 
-    private static final int LOOP_INTERVAL = 60;
-    private static int loopTick = 0;
     private static SoundEvent activeLoopSound = null;
     private static boolean loopActive = false;
+    private static int loopTick = 0;
 
-    // Variables de sécurité pour la téléportation
-    private static int teleportGraceTicks = 0;
-    private static net.minecraft.util.math.Vec3d lastPlayerPos = null;
+    // Structure simple pour mettre en attente les vérifications
+    private static class PendingEntity {
+        int entityId;
+        int ticksLeft;
+
+        PendingEntity(int entityId, int ticksLeft) {
+            this.entityId = entityId;
+            this.ticksLeft = ticksLeft;
+        }
+    }
+
+    private static final ArrayList<PendingEntity> pendingEntities = new ArrayList<>();
+    private static int joinCooldownTicks = 100; // Désactive les sons pendant 5 secondes au début
     private static net.minecraft.client.world.ClientWorld lastWorld = null;
-
-    private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
-    private static final Set<String> MYTHIC_LABELS      = Set.of("mythical");
-    private static final Set<String> ULTRA_BEAST_LABELS = Set.of("ultra_beast");
-    private static final Set<String> PARADOX_LABELS     = Set.of("paradox");
 
     @Override
     public void onInitializeClient() {
         LEGENDARY_SOUND = SoundEvent.of(Identifier.of("tropitracker", "legendary_spawn"));
-        SHINY_SOUND     = SoundEvent.of(Identifier.of("tropitracker", "shiny_spawn"));
-        PARADOX_SOUND   = SoundEvent.of(Identifier.of("tropitracker", "paradox_spawn"));
-        INCLUDED_SOUND  = SoundEvent.of(Identifier.of("tropitracker", "included_spawn"));
+        SHINY_SOUND = SoundEvent.of(Identifier.of("tropitracker", "shiny_spawn"));
+        PARADOX_SOUND = SoundEvent.of(Identifier.of("tropitracker", "paradox_spawn"));
+        INCLUDED_SOUND = SoundEvent.of(Identifier.of("tropitracker", "included_spawn"));
 
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
-            "TropiTracker Mute",
-            InputUtil.Type.KEYSYM,
-            186, // ù sur clavier AZERTY
-            "TropiTracker"
+                "key.tropitracker.mute",
+                InputUtil.Type.KEYSYM,
+                GLFW.GLFW_KEY_M,
+                "category.tropitracker"
         ));
 
+        // Détection de l'apparition d'une entité
+        ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
+            if (entity instanceof PokemonEntity) {
+                // Si la sécurité de connexion est active, on ne fait rien
+                if (joinCooldownTicks > 0) {
+                    return;
+                }
+                // On met l'entité en attente pendant 30 ticks (1,5 seconde)
+                pendingEntities.add(new PendingEntity(entity.getId(), 30));
+            }
+        });
+
+        // Gestion à chaque tick du jeu
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (client.player == null) return;
+
+            // Réinitialise la sécurité si on change de monde ou si on se connecte
+            if (client.world != lastWorld) {
+                lastWorld = client.world;
+                joinCooldownTicks = 100;
+                pendingEntities.clear();
+            }
+
+            if (joinCooldownTicks > 0) {
+                joinCooldownTicks--;
+            }
+
             while (muteKey.wasPressed()) {
                 muted = !muted;
-                if (client.player != null) {
-                    client.player.sendMessage(
-                        Text.literal(muted ? "§cTropiTracker : Son coupé 🔇" : "§aTropiTracker : Son activé 🔊"),
-                        true
-                    );
-                }
-            }
-
-            // Détection du changement de serveur ou de téléportation rapide
-            if (client.player != null && client.world != null) {
-                if (lastWorld != client.world) {
-                    teleportGraceTicks = 140; // 7 secondes de sécurité au changement de serveur
-                    lastWorld = client.world;
-                    lastPlayerPos = client.player.getPos();
-                } else if (lastPlayerPos != null) {
-                    if (client.player.getPos().squaredDistanceTo(lastPlayerPos) > 2500) {
-                        teleportGraceTicks = 100; // 5 secondes de sécurité
-                    }
-                    lastPlayerPos = client.player.getPos();
+                if (muted) {
+                    client.player.sendMessage(Text.literal("§c[TropiTracker] Alertes coupées."), false);
                 } else {
-                    lastPlayerPos = client.player.getPos();
+                    client.player.sendMessage(Text.literal("§a[TropiTracker] Alertes activées."), false);
                 }
             }
 
-            if (teleportGraceTicks > 0) {
-                teleportGraceTicks--;
-            }
+            // Vérification des Pokémon mis en attente
+            for (int i = pendingEntities.size() - 1; i >= 0; i--) {
+                PendingEntity pending = pendingEntities.get(i);
+                pending.ticksLeft--;
 
-            // Vérifier les entités en attente
-            if (!pendingEntities.isEmpty() && client.world != null) {
-                java.util.List<java.util.UUID> toRemove = new java.util.ArrayList<>();
-                for (java.util.Map.Entry<java.util.UUID, PokemonEntity> entry : pendingEntities.entrySet()) {
-                    int ticks = pendingTicks.getOrDefault(entry.getKey(), 0) + 1;
-                    pendingTicks.put(entry.getKey(), ticks);
-                    if (ticks >= CHECK_DELAY) {
-                        toRemove.add(entry.getKey());
-                        PokemonEntity pe = entry.getValue();
-                        Pokemon poke = pe.getPokemon();
-                        
-                        // CORRECTION : On s'assure que le Pokémon est bien sauvage et pas en combat
-                        if (poke.isWild() && pe.getBattleId() == null) {
-                            handleSpawn(poke);
+                if (pending.ticksLeft <= 0) {
+                    pendingEntities.remove(i);
+
+                    if (client.world != null) {
+                        Entity entity = client.world.getEntityById(pending.entityId);
+                        if (entity instanceof PokemonEntity) {
+                            PokemonEntity pe = (PokemonEntity) entity;
+                            Pokemon poke = pe.getPokemon();
+
+                            if (poke != null) {
+                                // VÉRIFICATION STRICTE après délai : pas de propriétaire et doit être sauvage
+                                if (poke.getOwnerUUID() == null && poke.isWild()) {
+                                    checkAndPlayAlert(client, poke);
+                                }
+                            }
                         }
                     }
                 }
-                for (java.util.UUID uuid : toRemove) {
-                    pendingEntities.remove(uuid);
-                    pendingTicks.remove(uuid);
-                }
             }
-
-            if (loopActive && !muted && activeLoopSound != null && client.player != null) {
-                loopTick++;
-                if (loopTick >= LOOP_INTERVAL) {
-                    loopTick = 0;
-                    client.player.playSound(activeLoopSound, 1.0f, 1.0f);
-                }
-            }
-        });
-
-        ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
-            if (!(entity instanceof PokemonEntity pokemonEntity)) return;
-            
-            if (teleportGraceTicks > 0) return;
-
-            java.util.UUID entityUUID = pokemonEntity.getUuid();
-            if (seenEntities.contains(entityUUID)) return;
-            seenEntities.add(entityUUID);
-            pendingEntities.put(entityUUID, pokemonEntity);
-        });
-
-        ClientEntityEvents.ENTITY_UNLOAD.register((entity, world) -> {
-            if (!(entity instanceof PokemonEntity)) return;
-            seenEntities.remove(entity.getUuid());
-            MinecraftClient client = MinecraftClient.getInstance();
-            if (client.world == null) return;
-
-            boolean stillPresent = false;
-            for (Entity e : client.world.getEntities()) {
-                if (e == entity || !(e instanceof PokemonEntity pe)) continue;
-                if (!pe.getPokemon().isWild()) continue; // Ignore les Pokémon des joueurs
-                
-                String name = pe.getPokemon().getSpecies().getName().toLowerCase();
-                String fr = FrenchNames.get(name);
-                if (trackedPokemons.contains(name) ||
-                    (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
-                    isSpecialPokemon(pe.getPokemon())) {
-                    stillPresent = true;
-                    break;
-                }
-            }
-            if (!stillPresent) {
-                loopActive = false;
-                activeLoopSound = null;
-            }
-        });
-
-        net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
-            if (message.toLowerCase().startsWith("track ")) {
-                String pokemonName = message.substring(6).trim().toLowerCase();
-                handleTrackCommand(pokemonName);
-                return false;
-            }
-            return true;
         });
     }
 
-    private void handleTrackCommand(String name) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null) return;
-
-        if (trackedPokemons.contains(name)) {
-            trackedPokemons.remove(name);
-            loopActive = false;
-            activeLoopSound = null;
-            client.player.sendMessage(
-                Text.literal("§cTropiTracker : §f" + capitalize(name) + " §cretiré de la liste."),
-                false
-            );
-        } else {
-            trackedPokemons.add(name);
-            client.player.sendMessage(
-                Text.literal("§aTropiTracker : §f" + capitalize(name) + " §aajouté à la liste !"),
-                false
-            );
-        }
-
-        if (!trackedPokemons.isEmpty()) {
-            client.player.sendMessage(
-                Text.literal("§6Pokémon suivis : §f" + String.join(", ", trackedPokemons)),
-                false
-            );
-        }
-    }
-
-    private void handleSpawn(Pokemon pokemon) {
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null) return;
-        if (!pokemon.isWild()) return; // Sécurité supplémentaire
-
-        String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        String frenchName = FrenchNames.get(speciesName);
-        if (frenchName == null) frenchName = pokemon.getSpecies().getName();
-
-        Set<String> labels = pokemon.getSpecies().getLabels();
-        boolean isShiny = pokemon.getShiny();
+    private void checkAndPlayAlert(MinecraftClient client, Pokemon poke) {
+        if (!isSpecialPokemon(poke)) return;
 
         SoundEvent sound = null;
         String message = null;
 
-        String frLower = frenchName.toLowerCase();
-        if (!trackedPokemons.isEmpty() &&
-            (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
-            sound = INCLUDED_SOUND;
-            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
-        } else if (isShiny && enableShiny) {
+        if (poke.getShiny() && enableShiny) {
             sound = SHINY_SOUND;
-            message = "§6✨ Pokémon Shiny apparu : §e" + frenchName + " §6✨";
-        } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
+            message = "§e[TropiTracker] Un Pokémon Shiny sauvage est proche : " + capitalize(poke.getSpecies().getName());
+        } else if (hasLabel(poke.getSpecies().getLabels(), LEGENDARY_LABELS) && enableLegendary) {
             sound = LEGENDARY_SOUND;
-            message = "§c⚡ Légendaire apparu : §f" + frenchName + " §c⚡";
-        } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
-            sound = LEGENDARY_SOUND;
-            message = "§d✦ Mystique apparu : §f" + frenchName + " §d✦";
-        } else if (enableUltraBeast && hasLabel(labels, ULTRA_BEAST_LABELS)) {
-            sound = INCLUDED_SOUND;
-            message = "§b◆ Ultra-Chimère apparu : §f" + frenchName + " §b◆";
-        } else if (enableParadox && hasLabel(labels, PARADOX_LABELS)) {
+            message = "§6[TropiTracker] Un Pokémon Légendaire sauvage est proche : " + capitalize(poke.getSpecies().getName());
+        } else if (hasLabel(poke.getSpecies().getLabels(), PARADOX_LABELS) && enableParadox) {
             sound = PARADOX_SOUND;
-            message = "§5⚔ Pokémon Paradoxe apparu : §f" + frenchName + " §5⚔";
+            message = "§d[TropiTracker] Un Pokémon Paradoxe sauvage est proche : " + capitalize(poke.getSpecies().getName());
         }
 
         if (sound != null && message != null) {
@@ -254,25 +163,24 @@ public class TropiTrackerClient implements ClientModInitializer {
             final String finalMessage = message;
             if (!muted) {
                 client.execute(() -> {
-                    client.player.sendMessage(Text.literal(finalMessage), false);
-                    client.player.playSound(finalSound, 1.0f, 1.0f);
+                    if (client.player != null) {
+                        client.player.sendMessage(Text.literal(finalMessage), false);
+                        client.player.playSound(finalSound, 1.0f, 1.0f);
+                    }
                 });
             }
         }
     }
 
     private boolean isSpecialPokemon(Pokemon pokemon) {
-        if (!pokemon.isWild()) return false; // Sécurité supplémentaire
         Set<String> labels = pokemon.getSpecies().getLabels();
         String name = pokemon.getSpecies().getName().toLowerCase();
-        String fr = FrenchNames.get(name);
         return pokemon.getShiny() ||
                hasLabel(labels, LEGENDARY_LABELS) ||
                hasLabel(labels, MYTHIC_LABELS) ||
                hasLabel(labels, ULTRA_BEAST_LABELS) ||
                hasLabel(labels, PARADOX_LABELS) ||
-               trackedPokemons.contains(name) ||
-               (fr != null && trackedPokemons.contains(fr.toLowerCase()));
+               trackedPokemons.contains(name);
     }
 
     private boolean hasLabel(Set<String> labels, Set<String> targets) {
