@@ -88,7 +88,6 @@ public class TropiTrackerClient implements ClientModInitializer {
                     lastWorld = client.world;
                     lastPlayerPos = client.player.getPos();
                 } else if (lastPlayerPos != null) {
-                    // Téléportation sur le même serveur (plus de 50 blocs d'un coup)
                     if (client.player.getPos().squaredDistanceTo(lastPlayerPos) > 2500) {
                         teleportGraceTicks = 100; // 5 secondes de sécurité
                     }
@@ -112,7 +111,9 @@ public class TropiTrackerClient implements ClientModInitializer {
                         toRemove.add(entry.getKey());
                         PokemonEntity pe = entry.getValue();
                         Pokemon poke = pe.getPokemon();
-                        if (poke.getOwnerUUID() == null && pe.getBattleId() == null) {
+                        
+                        // CORRECTION : On s'assure que le Pokémon est bien sauvage et pas en combat
+                        if (poke.isWild() && pe.getBattleId() == null) {
                             handleSpawn(poke);
                         }
                     }
@@ -135,7 +136,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
             
-            // Si on vient de se téléporter, on ignore complètement l'entité
             if (teleportGraceTicks > 0) return;
 
             java.util.UUID entityUUID = pokemonEntity.getUuid();
@@ -153,7 +153,8 @@ public class TropiTrackerClient implements ClientModInitializer {
             boolean stillPresent = false;
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
-                if (pe.getPokemon().getOwnerUUID() != null) continue;
+                if (!pe.getPokemon().isWild()) continue; // Ignore les Pokémon des joueurs
+                
                 String name = pe.getPokemon().getSpecies().getName().toLowerCase();
                 String fr = FrenchNames.get(name);
                 if (trackedPokemons.contains(name) ||
@@ -210,6 +211,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private void handleSpawn(Pokemon pokemon) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
+        if (!pokemon.isWild()) return; // Sécurité supplémentaire
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
         String frenchName = FrenchNames.get(speciesName);
@@ -260,6 +262,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private boolean isSpecialPokemon(Pokemon pokemon) {
+        if (!pokemon.isWild()) return false; // Sécurité supplémentaire
         Set<String> labels = pokemon.getSpecies().getLabels();
         String name = pokemon.getSpecies().getName().toLowerCase();
         String fr = FrenchNames.get(name);
