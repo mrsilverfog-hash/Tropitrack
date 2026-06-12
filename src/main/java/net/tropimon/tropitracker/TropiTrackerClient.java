@@ -3,7 +3,6 @@ package net.tropimon.tropitracker;
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import com.cobblemon.mod.common.pokemon.Pokemon;
 import net.fabricmc.api.ClientModInitializer;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 import net.minecraft.client.MinecraftClient;
@@ -41,11 +40,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static final Set<String> PARADOX_LABELS = Set.of("paradox");
     private static final Set<String> trackedPokemons = new HashSet<>();
 
-    private static SoundEvent activeLoopSound = null;
-    private static boolean loopActive = false;
-    private static int loopTick = 0;
-
-    // Structure simple pour mettre en attente les vérifications
+    // Structure pour mettre les Pokémon en attente de vérification
     private static class PendingEntity {
         int entityId;
         int ticksLeft;
@@ -56,8 +51,10 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
+    private static final Set<Integer> processedEntities = new HashSet<>();
     private static final ArrayList<PendingEntity> pendingEntities = new ArrayList<>();
-    private static int joinCooldownTicks = 100; // Désactive les sons pendant 5 secondes au début
+    
+    private static int joinCooldownTicks = 100; // 5 secondes de sécurité à la connexion
     private static net.minecraft.client.world.ClientWorld lastWorld = null;
 
     @Override
@@ -74,33 +71,18 @@ public class TropiTrackerClient implements ClientModInitializer {
                 "category.tropitracker"
         ));
 
-        // Détection de l'apparition d'une entité
-        ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
-            if (entity instanceof PokemonEntity) {
-                // Si la sécurité de connexion est active, on ne fait rien
-                if (joinCooldownTicks > 0) {
-                    return;
-                }
-                // On met l'entité en attente pendant 30 ticks (1,5 seconde)
-                pendingEntities.add(new PendingEntity(entity.getId(), 30));
-            }
-        });
-
-        // Gestion à chaque tick du jeu
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
-            if (client.player == null) return;
+            if (client.player == null || client.world == null) return;
 
-            // Réinitialise la sécurité si on change de monde ou si on se connecte
+            // Si on change de monde ou qu'on se connecte
             if (client.world != lastWorld) {
                 lastWorld = client.world;
                 joinCooldownTicks = 100;
+                processedEntities.clear();
                 pendingEntities.clear();
             }
 
-            if (joinCooldownTicks > 0) {
-                joinCooldownTicks--;
-            }
-
+            // Gestion de la touche pour couper le son
             while (muteKey.wasPressed()) {
                 muted = !muted;
                 if (muted) {
@@ -110,31 +92,59 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Vérification des Pokémon mis en attente
+            // Sécurité de connexion : on enregistre les Pokémon déjà là sans faire de bruit
+            if (joinCooldownTicks > 0) {
+                joinCooldownTicks--;
+                for (Entity entity : client.world.getEntities()) {
+                    if (entity instanceof PokemonEntity) {
+                        processedEntities.add(entity.getId());
+                    }
+                }
+                return;
+            }
+
+            // Scanner la zone pour trouver les nouveaux Pokémon
+            for (Entity entity : client.world.getEntities()) {
+                if (entity instanceof PokemonEntity) {
+                    int id = entity.getId();
+                    if (!processedEntities.contains(id) && !containsPending(id)) {
+                        pendingEntities.add(new PendingEntity(id, 10)); // Attente de 10 ticks (0,5 seconde)
+                    }
+                }
+            }
+
+            // Vérification des Pokémon après le petit délai
             for (int i = pendingEntities.size() - 1; i >= 0; i--) {
                 PendingEntity pending = pendingEntities.get(i);
                 pending.ticksLeft--;
 
                 if (pending.ticksLeft <= 0) {
                     pendingEntities.remove(i);
+                    processedEntities.add(pending.entityId); // Marqué comme traité
 
-                    if (client.world != null) {
-                        Entity entity = client.world.getEntityById(pending.entityId);
-                        if (entity instanceof PokemonEntity) {
-                            PokemonEntity pe = (PokemonEntity) entity;
-                            Pokemon poke = pe.getPokemon();
-
-                            if (poke != null) {
-                                // VÉRIFICATION STRICTE après délai : pas de propriétaire et doit être sauvage
-                                if (poke.getOwnerUUID() == null && poke.isWild()) {
-                                    checkAndPlayAlert(client, poke);
-                                }
+                    Entity entity = client.world.getEntityById(pending.entityId);
+                    if (entity instanceof PokemonEntity pe) {
+                        Pokemon poke = pe.getPokemon();
+                        if (poke != null) {
+                            // Vérification finale : sauvage et sans propriétaire
+                            if (poke.isWild() && poke.getOwnerUUID() == null) {
+                                checkAndPlayAlert(client, poke);
                             }
                         }
                     }
                 }
             }
+
+            // Nettoyage de la mémoire si le Pokémon s'en va ou est rangé dans sa Pokéball
+            processedEntities.removeIf(id -> client.world.getEntityById(id) == null);
         });
+    }
+
+    private static boolean containsPending(int id) {
+        for (PendingEntity p : pendingEntities) {
+            if (p.entityId == id) return true;
+        }
+        return false;
     }
 
     private void checkAndPlayAlert(MinecraftClient client, Pokemon poke) {
@@ -154,21 +164,15 @@ public class TropiTrackerClient implements ClientModInitializer {
             message = "§d[TropiTracker] Un Pokémon Paradoxe sauvage est proche : " + capitalize(poke.getSpecies().getName());
         }
 
-        if (sound != null && message != null) {
-            activeLoopSound = sound;
-            loopActive = true;
-            loopTick = 0;
-
-            final SoundEvent finalSound = sound;
-            final String finalMessage = message;
-            if (!muted) {
-                client.execute(() -> {
-                    if (client.player != null) {
-                        client.player.sendMessage(Text.literal(finalMessage), false);
-                        client.player.playSound(finalSound, 1.0f, 1.0f);
-                    }
-                });
-            }
+        if (sound != null && message != null && !muted) {
+            SoundEvent finalSound = sound;
+            String finalMessage = message;
+            client.execute(() -> {
+                if (client.player != null) {
+                    client.player.sendMessage(Text.literal(finalMessage), false);
+                    client.player.playSound(finalSound, 1.0f, 1.0f);
+                }
+            });
         }
     }
 
