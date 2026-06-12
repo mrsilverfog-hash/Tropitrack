@@ -24,8 +24,16 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static KeyBinding muteKey;
     private static boolean muted = false;
 
+    public static SoundEvent LEGENDARY_SOUND;
     public static SoundEvent SHINY_SOUND;
+    public static SoundEvent PARADOX_SOUND;
     public static SoundEvent INCLUDED_SOUND;
+
+    public static boolean enableLegendary  = true;
+    public static boolean enableMythic     = true;
+    public static boolean enableUltraBeast = true;
+    public static boolean enableParadox    = true;
+    public static boolean enableShiny      = true;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
     // UUID des entités déjà notifiées pour éviter les doublons
@@ -40,9 +48,16 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static SoundEvent activeLoopSound = null;
     private static boolean loopActive = false;
 
+    private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
+    private static final Set<String> MYTHIC_LABELS      = Set.of("mythical");
+    private static final Set<String> ULTRA_BEAST_LABELS = Set.of("ultra_beast");
+    private static final Set<String> PARADOX_LABELS     = Set.of("paradox");
+
     @Override
     public void onInitializeClient() {
+        LEGENDARY_SOUND = SoundEvent.of(Identifier.of("tropitracker", "legendary_spawn"));
         SHINY_SOUND     = SoundEvent.of(Identifier.of("tropitracker", "shiny_spawn"));
+        PARADOX_SOUND   = SoundEvent.of(Identifier.of("tropitracker", "paradox_spawn"));
         INCLUDED_SOUND  = SoundEvent.of(Identifier.of("tropitracker", "included_spawn"));
 
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
@@ -72,7 +87,11 @@ public class TropiTrackerClient implements ClientModInitializer {
                     if (ticks >= CHECK_DELAY) {
                         toRemove.add(entry.getKey());
                         PokemonEntity pe = entry.getValue();
-                        handleSpawn(pe);
+                        Pokemon poke = pe.getPokemon();
+                        // SÉCURITÉ : On vérifie obligatoirement que le Pokémon est sauvage (.isWild())
+                        if (poke.isWild() && poke.getOwnerUUID() == null && pe.getBattleId() == null) {
+                            handleSpawn(poke);
+                        }
                     }
                 }
                 for (java.util.UUID uuid : toRemove) {
@@ -105,27 +124,24 @@ public class TropiTrackerClient implements ClientModInitializer {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world == null) return;
 
-            // Vérifier si un Pokémon suivi ou un Shiny sauvage est encore présent autour de nous
+            // Vérifier si un Pokémon spécial est encore présent
             boolean stillPresent = false;
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
+                Pokemon poke = pe.getPokemon();
+                // SÉCURITÉ : On ignore les Pokémon qui ne sont pas sauvages
+                if (!poke.isWild() || poke.getOwnerUUID() != null) continue;
                 
-                // SÉCURITÉ : On ignore les Pokémon qui ont un maître, un dresseur d'origine ou en combat
-                if (pe.getPokemon().getOwnerUUID() != null || 
-                    pe.getPokemon().getOriginalTrainer() != null || 
-                    pe.getBattleId() != null) continue;
-
-                String name = pe.getPokemon().getSpecies().getName().toLowerCase();
+                String name = poke.getSpecies().getName().toLowerCase();
                 String fr = FrenchNames.get(name);
-                
-                if (trackedPokemons.contains(name) || 
+                if (trackedPokemons.contains(name) ||
                     (fr != null && trackedPokemons.contains(fr.toLowerCase())) ||
-                    pe.getPokemon().getShiny()) {
+                    isSpecialPokemon(poke)) {
                     stillPresent = true;
                     break;
                 }
             }
-            if (!notStillPresent(stillPresent)) {
+            if (!stillPresent) {
                 loopActive = false;
                 activeLoopSound = null;
             }
@@ -141,16 +157,13 @@ public class TropiTrackerClient implements ClientModInitializer {
         });
     }
 
-    private static boolean notStillPresent(boolean stillPresent) {
-        return stillPresent;
-    }
-
     private void handleTrackCommand(String name) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
 
         if (trackedPokemons.contains(name)) {
             trackedPokemons.remove(name);
+            // Arrêter le son en boucle
             loopActive = false;
             activeLoopSound = null;
             client.player.sendMessage(
@@ -173,21 +186,19 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
-    private void handleSpawn(PokemonEntity pe) {
+    private void handleSpawn(Pokemon pokemon) {
+        // SÉCURITÉ : Si le Pokémon n'est pas sauvage, on arrête tout de suite
+        if (!pokemon.isWild() || pokemon.getOwnerUUID() != null) return;
+
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
-
-        Pokemon pokemon = pe.getPokemon();
-        
-        // SÉCURITÉ MAXIMUM : 
-        // - pokemon.getOwnerUUID() != null -> C'est ton Pokémon
-        // - pokemon.getOriginalTrainer() != null -> Déjà capturé par un joueur (donc pas sauvage)
-        // - pe.getBattleId() != null -> Déjà en combat
-        if (pokemon.getOwnerUUID() != null || pokemon.getOriginalTrainer() != null || pe.getBattleId() != null) return;
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
         String frenchName = FrenchNames.get(speciesName);
         if (frenchName == null) frenchName = pokemon.getSpecies().getName();
+
+        Set<String> labels = pokemon.getSpecies().getLabels();
+        boolean isShiny = pokemon.getShiny();
 
         SoundEvent sound = null;
         String message = null;
@@ -196,11 +207,22 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!trackedPokemons.isEmpty() &&
             (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
             sound = INCLUDED_SOUND;
-            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (pokemon.getShiny() ? " §6✨ SHINY ✨" : "");
-        } else if (pokemon.getShiny()) {
-            // Déclenchement uniquement si le Shiny est 100% sauvage et libre
+            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
+        } else if (isShiny && enableShiny) {
             sound = SHINY_SOUND;
-            message = "§6✨ Pokémon Shiny SAUVAGE apparu : §e" + frenchName + " §6✨";
+            message = "§6✨ Pokémon Shiny apparu : §e" + frenchName + " §6✨";
+        } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
+            sound = LEGENDARY_SOUND;
+            message = "§c⚡ Légendaire apparu : §f" + frenchName + " §c⚡";
+        } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
+            sound = LEGENDARY_SOUND;
+            message = "§d✦ Mystique apparu : §f" + frenchName + " §d✦";
+        } else if (enableUltraBeast && hasLabel(labels, ULTRA_BEAST_LABELS)) {
+            sound = INCLUDED_SOUND;
+            message = "§b◆ Ultra-Chimère apparu : §f" + frenchName + " §b◆";
+        } else if (enableParadox && hasLabel(labels, PARADOX_LABELS)) {
+            sound = PARADOX_SOUND;
+            message = "§5⚔ Pokémon Paradoxe apparu : §f" + frenchName + " §5⚔";
         }
 
         if (sound != null && message != null) {
@@ -217,6 +239,29 @@ public class TropiTrackerClient implements ClientModInitializer {
                 });
             }
         }
+    }
+
+    private boolean isSpecialPokemon(Pokemon pokemon) {
+        // SÉCURITÉ : Si le Pokémon n'est pas sauvage, il n'est pas considéré comme spécial
+        if (!pokemon.isWild() || pokemon.getOwnerUUID() != null) return false;
+
+        Set<String> labels = pokemon.getSpecies().getLabels();
+        String name = pokemon.getSpecies().getName().toLowerCase();
+        String fr = FrenchNames.get(name);
+        return pokemon.getShiny() ||
+               hasLabel(labels, LEGENDARY_LABELS) ||
+               hasLabel(labels, MYTHIC_LABELS) ||
+               hasLabel(labels, ULTRA_BEAST_LABELS) ||
+               hasLabel(labels, PARADOX_LABELS) ||
+               trackedPokemons.contains(name) ||
+               (fr != null && trackedPokemons.contains(fr.toLowerCase()));
+    }
+
+    private boolean hasLabel(Set<String> labels, Set<String> targets) {
+        for (String label : labels) {
+            if (targets.contains(label.toLowerCase())) return true;
+        }
+        return false;
     }
 
     private String capitalize(String s) {
