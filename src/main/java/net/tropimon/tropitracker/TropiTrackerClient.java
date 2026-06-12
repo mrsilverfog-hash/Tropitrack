@@ -1,4 +1,4 @@
-package net.tropimon.tropitracker;
+package net.tropimon.tropimon.tropitracker;
 
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import com.cobblemon.mod.common.pokemon.Pokemon;
@@ -36,9 +36,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static boolean enableShiny      = true;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
-    // UUID des entités déjà notifiées pour éviter les doublons
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
-    // Entités en attente de vérification (délai de 2 secondes)
     private static final java.util.Map<java.util.UUID, PokemonEntity> pendingEntities = new java.util.HashMap<>();
     private static final java.util.Map<java.util.UUID, Integer> pendingTicks = new java.util.HashMap<>();
     private static final int CHECK_DELAY = 40; // 2 secondes
@@ -47,6 +45,11 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static int loopTick = 0;
     private static SoundEvent activeLoopSound = null;
     private static boolean loopActive = false;
+
+    // Variables pour gérer la sécurité anti-téléportation
+    private static int teleportGraceTicks = 0;
+    private static net.minecraft.util.math.Vec3d lastPlayerPos = null;
+    private static net.minecraft.client.world.ClientWorld lastWorld = null;
 
     private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
     private static final Set<String> MYTHIC_LABELS      = Set.of("mythical");
@@ -78,6 +81,28 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
+            // Détection du changement de serveur, de monde ou de téléportation
+            if (client.player != null && client.world != null) {
+                if (lastWorld != client.world) {
+                    // Changement de serveur ou de dimension : 7 secondes de sécurité (140 ticks)
+                    teleportGraceTicks = 140;
+                    lastWorld = client.world;
+                    lastPlayerPos = client.player.getPos();
+                } else if (lastPlayerPos != null) {
+                    // Téléportation sur le même serveur (plus de 50 blocs d'un coup) : 5 secondes de sécurité (100 ticks)
+                    if (client.player.getPos().squaredDistanceTo(lastPlayerPos) > 2500) {
+                        teleportGraceTicks = 100;
+                    }
+                    lastPlayerPos = client.player.getPos();
+                } else {
+                    lastPlayerPos = client.player.getPos();
+                }
+            }
+
+            if (teleportGraceTicks > 0) {
+                teleportGraceTicks--;
+            }
+
             // Vérifier les entités en attente
             if (!pendingEntities.isEmpty() && client.world != null) {
                 java.util.List<java.util.UUID> toRemove = new java.util.ArrayList<>();
@@ -88,7 +113,6 @@ public class TropiTrackerClient implements ClientModInitializer {
                         toRemove.add(entry.getKey());
                         PokemonEntity pe = entry.getValue();
                         Pokemon poke = pe.getPokemon();
-                        // SÉCURITÉ : On vérifie obligatoirement que le Pokémon est sauvage (.isWild())
                         if (poke.isWild() && poke.getOwnerUUID() == null && pe.getBattleId() == null) {
                             handleSpawn(poke);
                         }
@@ -111,10 +135,13 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
+
+            // SÉCURITÉ : Si on vient de se téléporter ou de changer de serveur, on ignore l'entité
+            if (teleportGraceTicks > 0) return;
+
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID)) return;
             seenEntities.add(entityUUID);
-            // Ajouter à la file d'attente pour vérification différée
             pendingEntities.put(entityUUID, pokemonEntity);
         });
 
@@ -124,12 +151,10 @@ public class TropiTrackerClient implements ClientModInitializer {
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.world == null) return;
 
-            // Vérifier si un Pokémon spécial est encore présent
             boolean stillPresent = false;
             for (Entity e : client.world.getEntities()) {
                 if (e == entity || !(e instanceof PokemonEntity pe)) continue;
                 Pokemon poke = pe.getPokemon();
-                // SÉCURITÉ : On ignore les Pokémon qui ne sont pas sauvages
                 if (!poke.isWild() || poke.getOwnerUUID() != null) continue;
                 
                 String name = poke.getSpecies().getName().toLowerCase();
@@ -163,7 +188,6 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         if (trackedPokemons.contains(name)) {
             trackedPokemons.remove(name);
-            // Arrêter le son en boucle
             loopActive = false;
             activeLoopSound = null;
             client.player.sendMessage(
@@ -187,7 +211,6 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private void handleSpawn(Pokemon pokemon) {
-        // SÉCURITÉ : Si le Pokémon n'est pas sauvage, on arrête tout de suite
         if (!pokemon.isWild() || pokemon.getOwnerUUID() != null) return;
 
         MinecraftClient client = MinecraftClient.getInstance();
@@ -242,7 +265,6 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private boolean isSpecialPokemon(Pokemon pokemon) {
-        // SÉCURITÉ : Si le Pokémon n'est pas sauvage, il n'est pas considéré comme spécial
         if (!pokemon.isWild() || pokemon.getOwnerUUID() != null) return false;
 
         Set<String> labels = pokemon.getSpecies().getLabels();
