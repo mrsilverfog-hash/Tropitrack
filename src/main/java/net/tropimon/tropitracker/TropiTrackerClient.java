@@ -273,7 +273,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
         } else if (isShiny && enableShiny) {
             message = "§6✨ Pokémon Shiny sauvage apparu : §e" + frenchName + " §6✨";
-        } else if (enableLegendary && hasLabel(labels, LEGARY_LABELS)) {
+        } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
             message = "§c⚡ Légendaire sauvage apparu : §f" + frenchName + " §c⚡";
         } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
             message = "§d✦ Mystique sauvage apparu : §f" + frenchName + " §d✦";
