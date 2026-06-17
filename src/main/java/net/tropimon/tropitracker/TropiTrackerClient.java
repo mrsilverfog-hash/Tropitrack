@@ -257,8 +257,12 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (sound == null) return;
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        String frenchName = FrenchNames.get(speciesName);
-        if (frenchName == null) frenchName = pokemon.getSpecies().getName();
+        
+        // Traduction automatique via le système officiel du jeu
+        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
+            frenchName = pokemon.getSpecies().getName();
+        }
 
         Set<String> labels = pokemon.getSpecies().getLabels();
         boolean isShiny = pokemon.getShiny();
@@ -269,7 +273,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
         } else if (isShiny && enableShiny) {
             message = "§6✨ Pokémon Shiny sauvage apparu : §e" + frenchName + " §6✨";
-        } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
+        } else if (enableLegendary && hasLabel(labels, LEGARY_LABELS)) {
             message = "§c⚡ Légendaire sauvage apparu : §f" + frenchName + " §c⚡";
         } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
             message = "§d✦ Mystique sauvage apparu : §f" + frenchName + " §d✦";
@@ -291,8 +295,13 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     private static SoundEvent getSpecialSound(Pokemon pokemon) {
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        String frenchName = FrenchNames.get(speciesName);
-        String frLower = (frenchName != null) ? frenchName.toLowerCase() : speciesName;
+        
+        // Traduction automatique pour garder la cohérence du scanner
+        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
+            frenchName = pokemon.getSpecies().getName();
+        }
+        String frLower = frenchName.toLowerCase();
         
         Set<String> labels = pokemon.getSpecies().getLabels();
         boolean isShiny = pokemon.getShiny();
