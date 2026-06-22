@@ -321,9 +321,9 @@ public class TropiTrackerClient implements ClientModInitializer {
             client.execute(() -> {
                 if (bigAlert) {
                     // Alerte plein écran pour les shiny (équivalent de la commande /title)
-                    client.inGameHud.getTitleRenderer().setTitle(Text.literal("§6✨ SHINY ✨"));
-                    client.inGameHud.getTitleRenderer().setSubtitle(Text.literal("§e" + finalDisplayName));
-                    client.inGameHud.getTitleRenderer().setTitleTicks(5, 70, 20); // fade-in, maintien, fade-out
+                    client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
+                    client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
+                    client.inGameHud.setTitleTicks(5, 70, 20); // fade-in, maintien, fade-out
                     client.player.playSound(finalSound, 3.0f, 1.0f); // volume x3
                 } else {
                     client.player.sendMessage(Text.literal(finalMessage), false);
