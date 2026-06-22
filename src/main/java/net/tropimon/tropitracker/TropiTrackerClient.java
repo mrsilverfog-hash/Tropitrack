@@ -53,6 +53,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static int scanTick = 0;
     private static int soundPlaybackTick = 0;
     private static SoundEvent activeLoopSound = null;
+    private static float activeLoopVolume = 1.0f;
     private static boolean loopActive = false;
 
     private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
@@ -91,6 +92,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 seenEntities.clear();
                 loopActive = false;
                 activeLoopSound = null;
+                activeLoopVolume = 1.0f;
                 scanTick = 0;
                 soundPlaybackTick = 0;
                 lastX = client.player.getX();
@@ -166,6 +168,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 scanTick = 0;
                 boolean specialFound = false;
                 SoundEvent foundSound = null;
+                float foundVolume = 1.0f;
 
                 for (Entity e : client.world.getEntities()) {
                     if (!(e instanceof PokemonEntity pe)) continue;
@@ -175,16 +178,19 @@ public class TropiTrackerClient implements ClientModInitializer {
                     if (detectedSound != null) {
                         specialFound = true;
                         foundSound = detectedSound;
+                        foundVolume = (pe.getPokemon().getShiny() && enableShiny) ? 3.0f : 1.0f;
                         break; 
                     }
                 }
 
                 if (specialFound) {
                     activeLoopSound = foundSound;
+                    activeLoopVolume = foundVolume;
                     loopActive = true;
                 } else {
                     loopActive = false;
                     activeLoopSound = null;
+                    activeLoopVolume = 1.0f;
                 }
             }
 
@@ -193,7 +199,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 soundPlaybackTick++;
                 if (soundPlaybackTick >= 60) {
                     soundPlaybackTick = 0;
-                    client.player.playSound(activeLoopSound, 1.0f, 1.0f);
+                    client.player.playSound(activeLoopSound, activeLoopVolume, 1.0f);
                 }
             } else {
                 soundPlaybackTick = 0;
@@ -284,11 +290,22 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
 
         if (!message.isEmpty() && !muted) {
-            String finalMessage = message;
             SoundEvent finalSound = sound;
+            boolean bigAlert = isShiny && enableShiny;
+            String finalDisplayName = frenchName;
+            String finalMessage = message;
+
             client.execute(() -> {
-                client.player.sendMessage(Text.literal(finalMessage), false);
-                client.player.playSound(finalSound, 1.0f, 1.0f);
+                if (bigAlert) {
+                    // Alerte plein écran pour les shiny (équivalent de la commande /title)
+                    client.inGameHud.getTitleRenderer().setTitle(Text.literal("§6✨ SHINY ✨"));
+                    client.inGameHud.getTitleRenderer().setSubtitle(Text.literal("§e" + finalDisplayName));
+                    client.inGameHud.getTitleRenderer().setTitleTicks(5, 70, 20); // fade-in, maintien, fade-out
+                    client.player.playSound(finalSound, 3.0f, 1.0f); // volume x3
+                } else {
+                    client.player.sendMessage(Text.literal(finalMessage), false);
+                    client.player.playSound(finalSound, 1.0f, 1.0f);
+                }
             });
         }
     }
