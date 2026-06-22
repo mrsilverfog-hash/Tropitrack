@@ -89,8 +89,8 @@ public class TropiTrackerClient implements ClientModInitializer {
             "TropiTracker"
         ));
 
-        // Rendu du faisceau doré au-dessus des Pokémon shiny, visible à travers les blocs
-        WorldRenderEvents.AFTER_TRANSLUCENT.register(ShinyBeamRenderer::render);
+        // Rendu du faisceau doré vers les Pokémon shiny, visible à travers les blocs
+        WorldRenderEvents.LAST.register(ShinyBeamRenderer::render);
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;
