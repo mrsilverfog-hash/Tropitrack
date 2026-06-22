@@ -1,302 +1,79 @@
 package net.tropimon.tropitracker;
 
-import java.util.HashMap;
-import java.util.Map;
+import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferRenderer;
+import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexFormats;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderContext;
+import net.minecraft.client.render.Camera;
+import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.render.Tessellator;
+import net.minecraft.client.util.math.MatrixStack;
+import net.minecraft.util.math.Vec3d;
+import org.joml.Matrix4f;
 
-public class FrenchNames {
+public class ShinyBeamRenderer {
 
-    private static final Map<String, String> NAMES = new HashMap<>();
+    // Couleur dorée du faisceau (0.0 - 1.0)
+    private static final float R = 1.0f;
+    private static final float G = 0.85f;
+    private static final float B = 0.1f;
+    private static final float ALPHA_BAS  = 0.6f; // opacité en bas, près du Pokémon
+    private static final float ALPHA_HAUT = 0.0f; // s'estompe en montant
 
-    static {
-        NAMES.put("abomasnow", "Blizzaroi"); NAMES.put("abra", "Abra"); NAMES.put("absol", "Absol");
-        NAMES.put("accelgor", "Escargaume"); NAMES.put("aegislash", "Exagide"); NAMES.put("aerodactyl", "Ptéra");
-        NAMES.put("aggron", "Galeking"); NAMES.put("aipom", "Capumain"); NAMES.put("alakazam", "Alakazam");
-        NAMES.put("alcremie", "Alcremie"); NAMES.put("alomomola", "Alomamou"); NAMES.put("altaria", "Altaria");
-        NAMES.put("amaura", "Amagara"); NAMES.put("ambipom", "Capidextre"); NAMES.put("amoonguss", "Fungus");
-        NAMES.put("ampharos", "Pharamp"); NAMES.put("annihilape", "Bourrageot"); NAMES.put("anorith", "Anorith");
-        NAMES.put("appletun", "Appletun"); NAMES.put("applin", "Manzaï"); NAMES.put("araquanid", "Toile-Mouille");
-        NAMES.put("arbok", "Arbok"); NAMES.put("arboliva", "Arboliva"); NAMES.put("arcanine", "Arcanin");
-        NAMES.put("arceus", "Arceus"); NAMES.put("archaludon", "Archaludon"); NAMES.put("archen", "Archen");
-        NAMES.put("archeops", "Aéroptéryx"); NAMES.put("arctibax", "Arctibax"); NAMES.put("arctovish", "Arctovish");
-        NAMES.put("armarouge", "Armarouge"); NAMES.put("arrokuda", "Arrokuda"); NAMES.put("articuno", "Artikodin");
-        NAMES.put("audino", "Nanméouïe"); NAMES.put("aurorus", "Dragmara"); NAMES.put("avalugg", "Séracrawl");
-        NAMES.put("axew", "Coupenotte"); NAMES.put("azelf", "Axelf"); NAMES.put("azumarill", "Azumarill");
-        NAMES.put("azurill", "Azurill"); NAMES.put("bagon", "Draby"); NAMES.put("baltoy", "Balbuto");
-        NAMES.put("banette", "Branette"); NAMES.put("barbaracle", "Barbarcle"); NAMES.put("barboach", "Barloche");
-        NAMES.put("barraskewda", "Barrascaïd"); NAMES.put("basculegion", "Basculégion"); NAMES.put("basculin", "Bargantua");
-        NAMES.put("bastiodon", "Bastiodon"); NAMES.put("bayleef", "Macronium"); NAMES.put("beartic", "Polagriffe");
-        NAMES.put("beautifly", "Charmillon"); NAMES.put("beedrill", "Dardargnan"); NAMES.put("beheeyem", "Noanam");
-        NAMES.put("beldum", "Terhal"); NAMES.put("bellibolt", "Bellibolt"); NAMES.put("bellsprout", "Chétiflor");
-        NAMES.put("bergmite", "Séracube"); NAMES.put("bewear", "Chelours"); NAMES.put("bibarel", "Castorno");
-        NAMES.put("bidoof", "Keunotor"); NAMES.put("bisharp", "Scalproie"); NAMES.put("blacephalon", "Blacéphalon");
-        NAMES.put("blastoise", "Tortank"); NAMES.put("blaziken", "Braségali"); NAMES.put("blipbug", "Larvadar");
-        NAMES.put("blissey", "Leuphorie"); NAMES.put("boltund", "Fulgudog"); NAMES.put("bombirdier", "Bombardier");
-        NAMES.put("bonsly", "Bonsley"); NAMES.put("bouffalant", "Frison"); NAMES.put("bounsweet", "Bounsweet");
-        NAMES.put("brambleghast", "Épinard"); NAMES.put("bramblin", "Épine"); NAMES.put("braviary", "Gueriaigle");
-        NAMES.put("breloom", "Chapignon"); NAMES.put("bronzong", "Bronzong"); NAMES.put("bronzor", "Bronzor");
-        NAMES.put("brute_bonnet", "Ballonade"); NAMES.put("bruxish", "Dévorécaille"); NAMES.put("budew", "Rozbouton");
-        NAMES.put("buizel", "Mustébouée"); NAMES.put("bulbasaur", "Bulbizarre"); NAMES.put("buneary", "Laporeille");
-        NAMES.put("bunnelby", "Sapereau"); NAMES.put("burmy", "Cheniti"); NAMES.put("butterfree", "Papilusion");
-        NAMES.put("cacnea", "Cacnea"); NAMES.put("cacturne", "Cacturne"); NAMES.put("calyrex", "Sylveroy");
-        NAMES.put("camerupt", "Camérupt"); NAMES.put("capsakid", "Pimito"); NAMES.put("carbink", "Carbopal");
-        NAMES.put("carnivine", "Crocadrome"); NAMES.put("carracosta", "Mégapagos"); NAMES.put("carvanha", "Kreflovorat");
-        NAMES.put("castform", "Morphéo"); NAMES.put("caterpie", "Chenipan"); NAMES.put("celebi", "Celebi");
-        NAMES.put("ceruledge", "Céruledge"); NAMES.put("cetitan", "Cétiplouf"); NAMES.put("cetoddle", "Cétiplouf");
-        NAMES.put("chandelure", "Lugulabre"); NAMES.put("chansey", "Leveinard"); NAMES.put("charizard", "Dracaufeu");
-        NAMES.put("charjabug", "Tengalice"); NAMES.put("charmander", "Salamèche"); NAMES.put("charmeleon", "Reptincel");
-        NAMES.put("chesnaught", "Blindépique"); NAMES.put("chespin", "Marisson"); NAMES.put("chewtle", "Mordudule");
-        NAMES.put("chikorita", "Germignon"); NAMES.put("chimchar", "Ouisticram"); NAMES.put("chimecho", "Tintignole");
-        NAMES.put("chinchou", "Chinchou"); NAMES.put("chingling", "Korillon"); NAMES.put("cinccino", "Pashmilla");
-        NAMES.put("cinderace", "Pyrobut"); NAMES.put("clamperl", "Coquiperl"); NAMES.put("clauncher", "Clauncher");
-        NAMES.put("clawitzer", "Clawitzer"); NAMES.put("claydol", "Archéodong"); NAMES.put("clefable", "Mélodelfe");
-        NAMES.put("clefairy", "Mélofée"); NAMES.put("cleffa", "Mélo"); NAMES.put("clobbopus", "Gnoggin");
-        NAMES.put("clodsire", "Clodsiré"); NAMES.put("cloyster", "Crustabri"); NAMES.put("coalossal", "Charbambin");
-        NAMES.put("cobalion", "Cobaltium"); NAMES.put("cofagrigus", "Tutankafer"); NAMES.put("comfey", "Floramis");
-        NAMES.put("conkeldurr", "Bétochef"); NAMES.put("copperajah", "Coppajah"); NAMES.put("corviknight", "Corvaillus");
-        NAMES.put("corvisquire", "Corvisquire"); NAMES.put("cosmoem", "Cosmoem"); NAMES.put("cosmog", "Cosmog");
-        NAMES.put("cottonee", "Blancoton"); NAMES.put("crabominable", "Crabominable"); NAMES.put("crabrawler", "Crabrawler");
-        NAMES.put("cramorant", "Nigosier"); NAMES.put("cranidos", "Cranidos"); NAMES.put("crawdaunt", "Écrapince");
-        NAMES.put("cresselia", "Cresselia"); NAMES.put("croagunk", "Croâporal"); NAMES.put("crobat", "Nostenfer");
-        NAMES.put("croconaw", "Crocrodil"); NAMES.put("crustle", "Crabicoque"); NAMES.put("cryogonal", "Ségelente");
-        NAMES.put("cubchoo", "Polarhume"); NAMES.put("cubone", "Osselait"); NAMES.put("cufant", "Cufant");
-        NAMES.put("cursola", "Corayôme"); NAMES.put("cutiefly", "Mignon"); NAMES.put("cyndaquil", "Hericendre");
-        NAMES.put("darkrai", "Darkrai"); NAMES.put("darmanitan", "Darumacho"); NAMES.put("dartrix", "Dartrix");
-        NAMES.put("darumaka", "Darumarond"); NAMES.put("decidueye", "Archéduc"); NAMES.put("dedenne", "Dedenne");
-        NAMES.put("deino", "Vorgarel"); NAMES.put("delcatty", "Delcatty"); NAMES.put("delibird", "Cadoizo");
-        NAMES.put("delphox", "Goupelin"); NAMES.put("deoxys", "Deoxys"); NAMES.put("dewgong", "Lamantine");
-        NAMES.put("dewott", "Moustillon"); NAMES.put("dhelmise", "Démoliosse"); NAMES.put("dialga", "Dialga");
-        NAMES.put("diancie", "Diancie"); NAMES.put("diggersby", "Terrafeross"); NAMES.put("diglett", "Taupiqueur");
-        NAMES.put("ditto", "Métamorph"); NAMES.put("dodrio", "Dodrio"); NAMES.put("doduo", "Doduo");
-        NAMES.put("dolliv", "Pommarthus"); NAMES.put("donphan", "Donphan"); NAMES.put("dracovish", "Dracovish");
-        NAMES.put("dracozolt", "Dracozolt"); NAMES.put("dragalge", "Phanceros"); NAMES.put("dragapult", "Lanssomax");
-        NAMES.put("dragonair", "Draco"); NAMES.put("dragonite", "Dracolosse"); NAMES.put("drakloak", "Lanssomax");
-        NAMES.put("drapion", "Drapion"); NAMES.put("dratini", "Minidraco"); NAMES.put("drednaw", "Rosabyss");
-        NAMES.put("dreepy", "Dreepy"); NAMES.put("drifblim", "Phastie"); NAMES.put("drifloon", "Baudrive");
-        NAMES.put("drilbur", "Taupike"); NAMES.put("drizzile", "Arrozards"); NAMES.put("drowzee", "Soporifik");
-        NAMES.put("druddigon", "Drakkarmin"); NAMES.put("dubwool", "Moumouton"); NAMES.put("dugtrio", "Triopikeur");
-        NAMES.put("dunsparce", "Insolourdo"); NAMES.put("duosion", "Duodino"); NAMES.put("duraludon", "Duraludon");
-        NAMES.put("durant", "Fermite"); NAMES.put("dusclops", "Téraclope"); NAMES.put("dusknoir", "Noctunoir");
-        NAMES.put("duskull", "Skelénox"); NAMES.put("dustox", "Papinox"); NAMES.put("dwebble", "Crabicoque");
-        NAMES.put("eelektrik", "Mélancolux"); NAMES.put("eelektross", "Anguillectro"); NAMES.put("eevee", "Évoli");
-        NAMES.put("electabuzz", "Élektek"); NAMES.put("electivire", "Élekable"); NAMES.put("electrike", "Dynaclou");
-        NAMES.put("electrode", "Électrode"); NAMES.put("elekid", "Élekid"); NAMES.put("elgyem", "Notisvé");
-        NAMES.put("emboar", "Flamboué"); NAMES.put("emolga", "Emolga"); NAMES.put("empoleon", "Pingoléon");
-        NAMES.put("entei", "Entei"); NAMES.put("escavalier", "Lançargot"); NAMES.put("espeon", "Mentali");
-        NAMES.put("espurr", "Psystigri"); NAMES.put("eternatus", "Éthernatos"); NAMES.put("excadrill", "Minotaupe");
-        NAMES.put("exeggcute", "Nœuapic"); NAMES.put("exeggutor", "Noadkoko"); NAMES.put("exploud", "Bruitapic");
-        NAMES.put("falinks", "Falinks"); NAMES.put("farfetchd", "Canarticho"); NAMES.put("farigiraf", "Farigiraf");
-        NAMES.put("fearow", "Rapasdepic"); NAMES.put("feebas", "Ababouin"); NAMES.put("fennekin", "Feunnec");
-        NAMES.put("feraligatr", "Aligatueur"); NAMES.put("ferroseed", "Grindur"); NAMES.put("ferrothorn", "Noacier");
-        NAMES.put("fidough", "Fidough"); NAMES.put("flaaffy", "Lainergie"); NAMES.put("flabebe", "Flabébé");
-        NAMES.put("flamigo", "Flamigo"); NAMES.put("flapple", "Croquitimon"); NAMES.put("fletchinder", "Flambusard");
-        NAMES.put("fletchling", "Passerouge"); NAMES.put("floatzel", "Mustéflott"); NAMES.put("floette", "Floette");
-        NAMES.put("florges", "Florges"); NAMES.put("flygon", "Libégon"); NAMES.put("fomantis", "Fomantis");
-        NAMES.put("foongus", "Moumousse"); NAMES.put("forretress", "Foretress"); NAMES.put("fraxure", "Incisache");
-        NAMES.put("frillish", "Viskuse"); NAMES.put("froakie", "Grenousse"); NAMES.put("frogadier", "Croâporal");
-        NAMES.put("froslass", "Momartik"); NAMES.put("frosmoth", "Froshki"); NAMES.put("fuecoco", "Fuecoco");
-        NAMES.put("furfrou", "Couafarel"); NAMES.put("furret", "Fouinar"); NAMES.put("gabite", "Gabite");
-        NAMES.put("gallade", "Gallame"); NAMES.put("galvantula", "Mygavolt"); NAMES.put("garbodor", "Miamiasme");
-        NAMES.put("garchomp", "Carchacrok"); NAMES.put("gardevoir", "Gardevoir"); NAMES.put("gastly", "Fantominus");
-        NAMES.put("gastrodon", "Tritosor"); NAMES.put("genesect", "Génesect"); NAMES.put("gengar", "Ectoplasma");
-        NAMES.put("geodude", "Racaillou"); NAMES.put("gholdengo", "Gholdengo"); NAMES.put("gible", "Griknot");
-        NAMES.put("gigalith", "Gigalithe"); NAMES.put("gimmighoul", "Gimmighoul"); NAMES.put("giratina", "Giratina");
-        NAMES.put("glaceon", "Givrali"); NAMES.put("glalie", "Oniglali"); NAMES.put("glameow", "Miaouss");
-        NAMES.put("gligar", "Scorplane"); NAMES.put("glimmet", "Glimmet"); NAMES.put("glimmora", "Glimmora");
-        NAMES.put("gliscor", "Scorvol"); NAMES.put("gloom", "Ortide"); NAMES.put("gogoat", "Gogoat");
-        NAMES.put("golbat", "Nosferaptus"); NAMES.put("goldeen", "Poissirène"); NAMES.put("golduck", "Akwakwak");
-        NAMES.put("golem", "Grolem"); NAMES.put("golett", "Golett"); NAMES.put("golisopod", "Golisopod");
-        NAMES.put("golurk", "Goligan"); NAMES.put("goodra", "Muplodocus"); NAMES.put("goomy", "Mucuscule");
-        NAMES.put("gorebyss", "Rosabyss"); NAMES.put("gossifleur", "Gossifeur"); NAMES.put("gothita", "Gothita");
-        NAMES.put("gothitelle", "Gothitelle"); NAMES.put("gothorita", "Gotheritta"); NAMES.put("grapploct", "Octogon");
-        NAMES.put("graveler", "Gravalanch"); NAMES.put("greavard", "Greavard"); NAMES.put("greninja", "Amphinobi");
-        NAMES.put("grimer", "Tadmorv"); NAMES.put("grookey", "Ouistempo"); NAMES.put("grotle", "Boskara");
-        NAMES.put("groudon", "Groudon"); NAMES.put("grovyle", "Massko"); NAMES.put("growlithe", "Caninos");
-        NAMES.put("grubbin", "Larvibule"); NAMES.put("grumpig", "Groret"); NAMES.put("gulpin", "Gnognot");
-        NAMES.put("gurdurr", "Bétochef"); NAMES.put("gyarados", "Léviator"); NAMES.put("happiny", "Toudoudou");
-        NAMES.put("hariyama", "Hariyama"); NAMES.put("hatenna", "Coiffarge"); NAMES.put("hatterene", "Coiffarge");
-        NAMES.put("hattrem", "Coiffarge"); NAMES.put("haunter", "Spectrum"); NAMES.put("hawlucha", "Brutalibre");
-        NAMES.put("haxorus", "Tranchodon"); NAMES.put("heatmor", "Ohmassacre"); NAMES.put("heatran", "Heatran");
-        NAMES.put("helioptile", "Hélionceau"); NAMES.put("heliolisk", "Héliocifer"); NAMES.put("heracross", "Scarhino");
-        NAMES.put("herdier", "Doguard"); NAMES.put("hippopotas", "Hippopotas"); NAMES.put("hippowdon", "Hippodocus");
-        NAMES.put("hitmonchan", "Tygnon"); NAMES.put("hitmonlee", "Kicklee"); NAMES.put("hitmontop", "Kapoera");
-        NAMES.put("ho_oh", "Ho-Oh"); NAMES.put("honchkrow", "Corboss"); NAMES.put("honedge", "Tranchesteele");
-        NAMES.put("hoopa", "Hoopa"); NAMES.put("hoppip", "Cotovol"); NAMES.put("horsea", "Hypotrempe");
-        NAMES.put("houndoom", "Démolosse"); NAMES.put("houndour", "Malosse"); NAMES.put("huntail", "Serpanuit");
-        NAMES.put("hydreigon", "Trioxhydre"); NAMES.put("hypno", "Hypnomade"); NAMES.put("igglybuff", "Toudou");
-        NAMES.put("illumise", "Lumivole"); NAMES.put("incineroar", "Félinferno"); NAMES.put("indeedee", "Wimessir");
-        NAMES.put("inteleon", "Lézargus"); NAMES.put("iron_boulder", "Rocher-de-Fer");
-        NAMES.put("iron_bundle", "Ballon-de-Fer"); NAMES.put("iron_hands", "Mains-de-Fer");
-        NAMES.put("iron_jugulis", "Cou-de-Fer"); NAMES.put("iron_leaves", "Feuilles-de-Fer");
-        NAMES.put("iron_moth", "Papillon-de-Fer"); NAMES.put("iron_thorns", "Épines-de-Fer");
-        NAMES.put("iron_treads", "Rouleau-de-Fer"); NAMES.put("iron_valiant", "Vaillant-de-Fer");
-        NAMES.put("iron_crown", "Couronne-de-Fer"); NAMES.put("jellicent", "Moyade");
-        NAMES.put("jigglypuff", "Rondoudou"); NAMES.put("jolteon", "Voltali"); NAMES.put("joltik", "Statitik");
-        NAMES.put("jumpluff", "Joliflor"); NAMES.put("jynx", "Lippoutou"); NAMES.put("jirachi", "Jirachi");
-        NAMES.put("kabuto", "Kabuto"); NAMES.put("kabutops", "Kabutops"); NAMES.put("kadabra", "Kadabra");
-        NAMES.put("kakuna", "Coconfort"); NAMES.put("kartana", "Kartana"); NAMES.put("kecleon", "Kecleon");
-        NAMES.put("kilowattrel", "Kilowatrel"); NAMES.put("kingambit", "Fer-de-Roi"); NAMES.put("kingdra", "Hyporoi");
-        NAMES.put("kingler", "Krabboss"); NAMES.put("kirlia", "Kirlia"); NAMES.put("klang", "Kaorine");
-        NAMES.put("klawf", "Klawf"); NAMES.put("klefki", "Trousselin"); NAMES.put("klink", "Klikling");
-        NAMES.put("klinklang", "Kaorine"); NAMES.put("komala", "Komala"); NAMES.put("kommo_o", "Ékaïser");
-        NAMES.put("koraidon", "Koraidon"); NAMES.put("krabby", "Krabby"); NAMES.put("kricketot", "Crikzik");
-        NAMES.put("kricketune", "Mélokrik"); NAMES.put("krokorok", "Escroco"); NAMES.put("krookodile", "Crocorible");
-        NAMES.put("kubfu", "Wubfu"); NAMES.put("kyogre", "Kyogre"); NAMES.put("kyurem", "Kyurem");
-        NAMES.put("landorus", "Démétéros"); NAMES.put("lanturn", "Lanturn"); NAMES.put("lapras", "Lokhlass");
-        NAMES.put("larvesta", "Pyronille"); NAMES.put("larvitar", "Embrylex"); NAMES.put("latias", "Latias");
-        NAMES.put("latios", "Latios"); NAMES.put("leafeon", "Phyllali"); NAMES.put("leavanny", "Cizayox");
-        NAMES.put("ledian", "Coxy"); NAMES.put("ledyba", "Coxyclaque"); NAMES.put("lickilicky", "Coudlangue");
-        NAMES.put("lickitung", "Excelangue"); NAMES.put("liepard", "Léopardus"); NAMES.put("lileep", "Lilia");
-        NAMES.put("lilligant", "Fragilady"); NAMES.put("lillipup", "Ponchiot"); NAMES.put("linoone", "Linéon");
-        NAMES.put("litleo", "Hélionceau"); NAMES.put("litwick", "Funécire"); NAMES.put("lokix", "Lokix");
-        NAMES.put("lombre", "Lombre"); NAMES.put("lopunny", "Lockpin"); NAMES.put("lotad", "Nénupiot");
-        NAMES.put("loudred", "Brouhabam"); NAMES.put("lucario", "Lucario"); NAMES.put("ludicolo", "Ludicolo");
-        NAMES.put("lugia", "Lugia"); NAMES.put("lumineon", "Nénufar"); NAMES.put("lunala", "Lunala");
-        NAMES.put("lunatone", "Lunatik"); NAMES.put("luvdisc", "Lovdisc"); NAMES.put("luxio", "Luxio");
-        NAMES.put("luxray", "Luxray"); NAMES.put("machamp", "Mackogneur"); NAMES.put("machoke", "Machopeur");
-        NAMES.put("machop", "Machoc"); NAMES.put("magby", "Magby"); NAMES.put("magcargo", "Limagma");
-        NAMES.put("magikarp", "Magicarpe"); NAMES.put("magmar", "Magmar"); NAMES.put("magmortar", "Maganon");
-        NAMES.put("magnemite", "Magnéti"); NAMES.put("magneton", "Magnéton"); NAMES.put("magnezone", "Magnézone");
-        NAMES.put("mamoswine", "Mammochon"); NAMES.put("manaphy", "Manaphy"); NAMES.put("mandibuzz", "Vautibec");
-        NAMES.put("manectric", "Élecsprint"); NAMES.put("mankey", "Férosinge"); NAMES.put("mantine", "Démanta");
-        NAMES.put("mantyke", "Mentali"); NAMES.put("maractus", "Maracachi"); NAMES.put("mareanie", "Vorastérie");
-        NAMES.put("mareep", "Wattouat"); NAMES.put("marill", "Marill"); NAMES.put("marowak", "Ossatueur");
-        NAMES.put("marshadow", "Marshadow"); NAMES.put("masquerain", "Maskadra"); NAMES.put("mawile", "Mysdibule");
-        NAMES.put("medicham", "Méditikka"); NAMES.put("meditite", "Méditikka"); NAMES.put("meganium", "Méganium");
-        NAMES.put("melmetal", "Melmetal"); NAMES.put("meltan", "Meltan"); NAMES.put("meowscarada", "Meowscarada");
-        NAMES.put("meowth", "Miaouss"); NAMES.put("mesprit", "Créhelf"); NAMES.put("metagross", "Métalosse");
-        NAMES.put("metang", "Métang"); NAMES.put("metapod", "Chrysacier"); NAMES.put("mew", "Mew");
-        NAMES.put("mewtwo", "Mewtwo"); NAMES.put("mienfoo", "Cargofret"); NAMES.put("mienshao", "Shaofouine");
-        NAMES.put("mightyena", "Grahyèna"); NAMES.put("milcery", "Milcery"); NAMES.put("milotic", "Milobellus");
-        NAMES.put("mimejr", "Mime Jr."); NAMES.put("mimikyu", "Mimiqui"); NAMES.put("minccino", "Chinchilu");
-        NAMES.put("minun", "Minun"); NAMES.put("miraidon", "Miraidon"); NAMES.put("misdreavus", "Feuforêve");
-        NAMES.put("mismagius", "Magirêve"); NAMES.put("moltres", "Sulfura"); NAMES.put("monferno", "Chimpenfeu");
-        NAMES.put("morelull", "Noctugel"); NAMES.put("morgrem", "Sorbébeurk"); NAMES.put("morpeko", "Morpeko");
-        NAMES.put("mothim", "Mithril"); NAMES.put("mr_mime", "M. Mime"); NAMES.put("mr_rime", "M. Glaquette");
-        NAMES.put("mudkip", "Gobou"); NAMES.put("mudsdale", "Bayard"); NAMES.put("murkrow", "Cornèbre");
-        NAMES.put("musharna", "Mushana"); NAMES.put("naclstack", "Naclstack"); NAMES.put("nacli", "Nacli");
-        NAMES.put("naganadel", "Coralgosse"); NAMES.put("natu", "Natu"); NAMES.put("necrozma", "Necrozma");
-        NAMES.put("nickit", "Miclaou"); NAMES.put("nidoking", "Nidoking"); NAMES.put("nidoqueen", "Nidoqueen");
-        NAMES.put("nidoran_f", "Nidoran♀"); NAMES.put("nidoran_m", "Nidoran♂");
-        NAMES.put("nidorina", "Nidorina"); NAMES.put("nidorino", "Nidorino"); NAMES.put("nihilego", "Créfadet");
-        NAMES.put("nincada", "Ningale"); NAMES.put("ninetales", "Feunard"); NAMES.put("ninjask", "Ninjask");
-        NAMES.put("noctowl", "Noarfang"); NAMES.put("noibat", "Soïgneur"); NAMES.put("noivern", "Bruyverne");
-        NAMES.put("numel", "Chamallot"); NAMES.put("nuzleaf", "Pifeuil"); NAMES.put("octillery", "Poulpied");
-        NAMES.put("oddish", "Mystherbe"); NAMES.put("oinkologne", "Cochignon"); NAMES.put("omanyte", "Amonita");
-        NAMES.put("omastar", "Amonistar"); NAMES.put("onix", "Onix"); NAMES.put("oranguru", "Oranguru");
-        NAMES.put("orbeetle", "Cocartik"); NAMES.put("oricorio", "Plumeline"); NAMES.put("oshawott", "Moustillon");
-        NAMES.put("overqwil", "Qwilpik"); NAMES.put("pachirisu", "Pachirisu"); NAMES.put("palkia", "Palkia");
-        NAMES.put("palossand", "Mémosaura"); NAMES.put("palpitoad", "Batracné"); NAMES.put("pancham", "Pandespiègle");
-        NAMES.put("pangoro", "Pandarbare"); NAMES.put("panpour", "Simiabdo"); NAMES.put("pansage", "Feuillajou");
-        NAMES.put("pansear", "Flamajou"); NAMES.put("paras", "Paras"); NAMES.put("parasect", "Parasect");
-        NAMES.put("passimian", "Pasrimain"); NAMES.put("pawmi", "Pawmi"); NAMES.put("pawmot", "Pawmot");
-        NAMES.put("pawniard", "Scalproie"); NAMES.put("pecharunt", "Pecharunt"); NAMES.put("pelipper", "Bekipan");
-        NAMES.put("persian", "Persian"); NAMES.put("petilil", "Flambino"); NAMES.put("phantump", "Brocélôme");
-        NAMES.put("pheromosa", "Pheromosa"); NAMES.put("phione", "Phione"); NAMES.put("pichu", "Pichu");
-        NAMES.put("pidgeot", "Roucarnage"); NAMES.put("pidgeotto", "Roucoups"); NAMES.put("pidgey", "Roucool");
-        NAMES.put("pidove", "Poichigeon"); NAMES.put("pikachu", "Pikachu"); NAMES.put("pikipek", "Picassaut");
-        NAMES.put("piloswine", "Marcacrin"); NAMES.put("pincurchin", "Ourswine"); NAMES.put("pinsir", "Scarabrute");
-        NAMES.put("piplup", "Tiplouf"); NAMES.put("plusle", "Plusle"); NAMES.put("poipole", "Coralgosse");
-        NAMES.put("polteageist", "Théffroi"); NAMES.put("poliwag", "Ptitard"); NAMES.put("poliwhirl", "Têtarte");
-        NAMES.put("poliwrath", "Tartard"); NAMES.put("ponyta", "Ponyta"); NAMES.put("poochyena", "Malosse");
-        NAMES.put("porygon", "Porygon"); NAMES.put("porygon2", "Porygon2"); NAMES.put("porygon_z", "Porygon-Z");
-        NAMES.put("primeape", "Colossinge"); NAMES.put("primarina", "Oratoria"); NAMES.put("prinplup", "Prinplouf");
-        NAMES.put("probopass", "Tarinorme"); NAMES.put("psyduck", "Psykokwak"); NAMES.put("pupitar", "Ymphect");
-        NAMES.put("purugly", "Gringoide"); NAMES.put("pyroar", "Pyroli"); NAMES.put("pyukumuku", "Concombaffe");
-        NAMES.put("quaquaval", "Palmaval"); NAMES.put("quaxly", "Coiffeton"); NAMES.put("quaxwell", "Coiffeton");
-        NAMES.put("qwilfish", "Qwilfish"); NAMES.put("rabsca", "Rabsca"); NAMES.put("raichu", "Raichu");
-        NAMES.put("raikou", "Raikou"); NAMES.put("ralts", "Tarsal"); NAMES.put("rampardos", "Rampardos");
-        NAMES.put("rapidash", "Galopa"); NAMES.put("raticate", "Rattatac"); NAMES.put("rattata", "Rattata");
-        NAMES.put("rayquaza", "Rayquaza"); NAMES.put("regice", "Regice"); NAMES.put("regidrago", "Regidrago");
-        NAMES.put("regieleki", "Regieleki"); NAMES.put("regigigas", "Regigigas"); NAMES.put("regirock", "Regirock");
-        NAMES.put("registeel", "Registeel"); NAMES.put("relicanth", "Relicanth"); NAMES.put("rellor", "Rellor");
-        NAMES.put("remoraid", "Rémoraid"); NAMES.put("reshiram", "Reshiram"); NAMES.put("reuniclus", "Réunofus");
-        NAMES.put("rhyhorn", "Rhinocorne"); NAMES.put("rhydon", "Rhinoféros"); NAMES.put("rhyperior", "Rhinastoc");
-        NAMES.put("ribombee", "Rubombelle"); NAMES.put("riolu", "Riolu"); NAMES.put("rockruff", "Rocabot");
-        NAMES.put("roggenrola", "Rocabot"); NAMES.put("rookidee", "Miniorat"); NAMES.put("roselia", "Rosélia");
-        NAMES.put("roserade", "Roserade"); NAMES.put("rotom", "Motisma"); NAMES.put("rufflet", "Fébilus");
-        NAMES.put("runerigus", "Runerigus"); NAMES.put("salandit", "Salandit"); NAMES.put("salazzle", "Salameche");
-        NAMES.put("samurott", "Samorott"); NAMES.put("sandaconda", "Constrictus"); NAMES.put("sandile", "Sabledoune");
-        NAMES.put("sandshrew", "Sabelette"); NAMES.put("sandslash", "Sablaireau"); NAMES.put("sandygast", "Trépassable");
-        NAMES.put("sawk", "Sendifis"); NAMES.put("sawsbuck", "Haydaim"); NAMES.put("scatterbug", "Lépidonille");
-        NAMES.put("sceptile", "Jungko"); NAMES.put("scizor", "Cizayox"); NAMES.put("scorbunny", "Scorbunny");
-        NAMES.put("scrafty", "Baggaïd"); NAMES.put("scraggy", "Baggaïd"); NAMES.put("scream_tail", "Queue-de-Cri");
-        NAMES.put("scyther", "Insecateur"); NAMES.put("seadra", "Hypocéan"); NAMES.put("seaking", "Poissoroy");
-        NAMES.put("sealeo", "Phogleur"); NAMES.put("seedot", "Grainipiot"); NAMES.put("seel", "Otaria");
-        NAMES.put("sentret", "Fouinette"); NAMES.put("serperior", "Majaspic"); NAMES.put("servine", "Lianaja");
-        NAMES.put("seviper", "Séviper"); NAMES.put("shaymin", "Shaymin"); NAMES.put("shedinja", "Munja");
-        NAMES.put("shelgon", "Drackhaus"); NAMES.put("shellder", "Kokiyas"); NAMES.put("shellos", "Sancoki");
-        NAMES.put("shelmet", "Escargaume"); NAMES.put("shieldon", "Dinoclier"); NAMES.put("shiinotic", "Lampignon");
-        NAMES.put("shiftry", "Tengalice"); NAMES.put("shinx", "Lixy"); NAMES.put("shroodle", "Shroodle");
-        NAMES.put("shuckle", "Caratroc"); NAMES.put("shuppet", "Polichombr"); NAMES.put("sigilyph", "Sigilphe");
-        NAMES.put("silvally", "Silvallié"); NAMES.put("sinistea", "Théffroi"); NAMES.put("sirfetchd", "Carnarticho");
-        NAMES.put("sizzlipede", "Scolocool"); NAMES.put("skarmory", "Airmure"); NAMES.put("skeledirge", "Grodoudou");
-        NAMES.put("skiddo", "Cabriolaine"); NAMES.put("skiploom", "Floravol"); NAMES.put("skitty", "Skitty");
-        NAMES.put("skrelp", "Venofeu"); NAMES.put("skuntank", "Moufflair"); NAMES.put("slaking", "Paresseux");
-        NAMES.put("slakoth", "Parecool"); NAMES.put("sligoo", "Colimucus"); NAMES.put("slowbro", "Flagadoss");
-        NAMES.put("slowking", "Roigada"); NAMES.put("slowpoke", "Ramoloss"); NAMES.put("slugma", "Limagma");
-        NAMES.put("slurpuff", "Sucroquin"); NAMES.put("smeargle", "Queulorior"); NAMES.put("smoliv", "Olivini");
-        NAMES.put("smoochum", "Lippouti"); NAMES.put("sneasel", "Farfurex"); NAMES.put("sneasler", "Sneasler");
-        NAMES.put("snivy", "Vipélierre"); NAMES.put("snorlax", "Ronflex"); NAMES.put("snorunt", "Stalgamin");
-        NAMES.put("snover", "Blancoton"); NAMES.put("snubbull", "Snubbull"); NAMES.put("sobble", "Larméléon");
-        NAMES.put("solgaleo", "Solgaleo"); NAMES.put("solosis", "Uniduo"); NAMES.put("solrock", "Solaroc");
-        NAMES.put("spearow", "Piafabec"); NAMES.put("spectrier", "Spectreval"); NAMES.put("spewpa", "Nymphali");
-        NAMES.put("spheal", "Obalie"); NAMES.put("spinarak", "Mimigal"); NAMES.put("spinda", "Spinda");
-        NAMES.put("spiritomb", "Spiritomb"); NAMES.put("spoink", "Groinkou"); NAMES.put("spritzee", "Parfaïdo");
-        NAMES.put("squawkabilly", "Becassine"); NAMES.put("squirtle", "Carapuce"); NAMES.put("stakataka", "Stakataka");
-        NAMES.put("stantler", "Cerfrousse"); NAMES.put("staraptor", "Étourvol"); NAMES.put("staravia", "Étourmi");
-        NAMES.put("starly", "Étourni"); NAMES.put("starmie", "Staross"); NAMES.put("staryu", "Étofrize");
-        NAMES.put("steelix", "Steelix"); NAMES.put("steenee", "Steenee"); NAMES.put("stonjourner", "Granivolt");
-        NAMES.put("stoutland", "Mastouffe"); NAMES.put("stufful", "Nounoursa"); NAMES.put("stunfisk", "Limonde");
-        NAMES.put("stunky", "Mouftitre"); NAMES.put("sudowoodo", "Simularbre"); NAMES.put("suicune", "Suicune");
-        NAMES.put("sunflora", "Hélianthus"); NAMES.put("sunkern", "Grainipiot"); NAMES.put("surskit", "Arakdo");
-        NAMES.put("swablu", "Négapi"); NAMES.put("swampert", "Laggron"); NAMES.put("swanna", "Lakmécygne");
-        NAMES.put("swinub", "Marcacrin"); NAMES.put("swirlix", "Sucroquin"); NAMES.put("sylveon", "Nymphali");
-        NAMES.put("taillow", "Nirondelle"); NAMES.put("talonflame", "Flambusard"); NAMES.put("tandemaus", "Tandemaus");
-        NAMES.put("tangela", "Tangela"); NAMES.put("tangrowth", "Baldorman"); NAMES.put("tarountula", "Tarountula");
-        NAMES.put("tatsugiri", "Tatsugiri"); NAMES.put("tauros", "Tauros"); NAMES.put("teddiursa", "Teddiursa");
-        NAMES.put("tentacool", "Tentacool"); NAMES.put("tentacruel", "Tentacruel"); NAMES.put("tepig", "Gruikui");
-        NAMES.put("terrakion", "Terrakium"); NAMES.put("thievul", "Léopardus"); NAMES.put("throh", "Judokrak");
-        NAMES.put("thundurus", "Fulguris"); NAMES.put("tinkatink", "Tinkatink"); NAMES.put("tinkatuff", "Tinkatuff");
-        NAMES.put("tinkaton", "Tinkaton"); NAMES.put("tirtouga", "Carapagos"); NAMES.put("toedscool", "Toedscool");
-        NAMES.put("toedscruel", "Toedscruel"); NAMES.put("togekiss", "Togekiss"); NAMES.put("togepi", "Togepi");
-        NAMES.put("togetic", "Togetic"); NAMES.put("torchic", "Poussifeu"); NAMES.put("torkoal", "Chartor");
-        NAMES.put("tornadus", "Boréas"); NAMES.put("torracat", "Flamiaou"); NAMES.put("torterra", "Torterra");
-        NAMES.put("totodile", "Kaiminus"); NAMES.put("toxapex", "Bèmothon"); NAMES.put("toxel", "Toxel");
-        NAMES.put("toxicroak", "Coatox"); NAMES.put("toxtricity", "Tapitrouille"); NAMES.put("tranquill", "Trombelleau");
-        NAMES.put("trapinch", "Kraknoix"); NAMES.put("treecko", "Arcko"); NAMES.put("trevenant", "Sylveroy");
-        NAMES.put("tropius", "Tropius"); NAMES.put("trubbish", "Sacrimuc"); NAMES.put("trumbeak", "Grosbeak");
-        NAMES.put("tsareena", "Tsareena"); NAMES.put("turtwig", "Tortipouss"); NAMES.put("tympole", "Têtarte");
-        NAMES.put("tynamo", "Anchwatt"); NAMES.put("type_null", "Silvallié"); NAMES.put("tyranitar", "Tyranocif");
-        NAMES.put("tyrantrum", "Rexillius"); NAMES.put("tyrogue", "Debugant"); NAMES.put("umbreon", "Noctali");
-        NAMES.put("unfezant", "Déflaisan"); NAMES.put("unown", "Zarbi"); NAMES.put("ursaluna", "Ursaluna");
-        NAMES.put("ursaring", "Ursaring"); NAMES.put("urshifu", "Shifours"); NAMES.put("uxie", "Créfollet");
-        NAMES.put("vanillish", "Sorbettifik"); NAMES.put("vanillite", "Vanillite"); NAMES.put("vanilluxe", "Sorbexplosif");
-        NAMES.put("vaporeon", "Aquali"); NAMES.put("venipede", "Scolocool"); NAMES.put("venomoth", "Aéromite");
-        NAMES.put("venonat", "Mimitoss"); NAMES.put("venusaur", "Florizarre"); NAMES.put("vespiquen", "Apireine");
-        NAMES.put("vibrava", "Vibraninf"); NAMES.put("victini", "Victini"); NAMES.put("vigoroth", "Vigoroth");
-        NAMES.put("vikavolt", "Lucanon"); NAMES.put("vileplume", "Rafflesia"); NAMES.put("virizion", "Viridium");
-        NAMES.put("vivillon", "Vivillon"); NAMES.put("volbeat", "Volbeat"); NAMES.put("volcanion", "Volcanion");
-        NAMES.put("volcarona", "Pyrax"); NAMES.put("voltorb", "Voltorbe"); NAMES.put("vullaby", "Vostourno");
-        NAMES.put("vulpix", "Goupix"); NAMES.put("wailmer", "Wailmer"); NAMES.put("wailord", "Wailord");
-        NAMES.put("walrein", "Obalie"); NAMES.put("wartortle", "Carabaffe"); NAMES.put("watchog", "Miradar");
-        NAMES.put("weavile", "Farfurex"); NAMES.put("weedle", "Aspicot"); NAMES.put("weepinbell", "Boustiflor");
-        NAMES.put("weezing", "Smogogo"); NAMES.put("whimsicott", "Farfaduvet"); NAMES.put("whirlipede", "Scobolide");
-        NAMES.put("whiscash", "Barbicha"); NAMES.put("wigglytuff", "Grodoudou"); NAMES.put("wishiwashi", "Froussardine");
-        NAMES.put("wobbuffet", "Qulbutoké"); NAMES.put("wooper", "Axoloto"); NAMES.put("wormadam", "Cheniselle");
-        NAMES.put("wurmple", "Chenipotte"); NAMES.put("xatu", "Xatu"); NAMES.put("xerneas", "Xerneas");
-        NAMES.put("xurkitree", "Xurkitree"); NAMES.put("yamask", "Tutafeh"); NAMES.put("yamper", "Jousticram");
-        NAMES.put("yanma", "Yanma"); NAMES.put("yanmega", "Yanmega"); NAMES.put("yveltal", "Yveltal");
-        NAMES.put("zangoose", "Zangoose"); NAMES.put("zapdos", "Électhor"); NAMES.put("zarude", "Zarude");
-        NAMES.put("zebstrika", "Zébibron"); NAMES.put("zekrom", "Zekrom"); NAMES.put("zeraora", "Zéraora");
-        NAMES.put("zigzagoon", "Zigzaton"); NAMES.put("zoroark", "Zoroark"); NAMES.put("zorua", "Zorua");
-        NAMES.put("zubat", "Nosferapti"); NAMES.put("zweilous", "Bipounkel"); NAMES.put("zygarde", "Zygarde");
-        NAMES.put("flutter_mane", "Voile-Flottante"); NAMES.put("slither_wing", "Ailes-Glissantes");
-        NAMES.put("sandy_shocks", "Chocs-de-Sable"); NAMES.put("roaring_moon", "Lune-Rugissante");
-        NAMES.put("walking_wake", "Vague-Marcheuse"); NAMES.put("gouging_fire", "Feu-Creusant");
-        NAMES.put("raging_bolt", "Éclair-Enragé"); NAMES.put("great_tusk", "Grand-Défenses");
+    private static final double BEAM_HEIGHT = 200.0; // hauteur du faisceau (en blocs)
+    private static final double HALF_WIDTH  = 0.25;  // épaisseur du faisceau
+
+    public static void render(WorldRenderContext context) {
+        var shinies = TropiTrackerClient.getActiveShinyEntities();
+        if (shinies.isEmpty()) return;
+
+        Camera camera = context.camera();
+        Vec3d camPos = camera.getPos();
+        float tickDelta = context.tickCounter().getTickDelta(true);
+
+        RenderSystem.disableDepthTest();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+
+        for (PokemonEntity pe : shinies) {
+            if (pe == null || pe.isRemoved()) continue;
+
+            Vec3d pos = pe.getLerpedPos(tickDelta);
+            double relX = pos.x - camPos.x;
+            double relY = pos.y - camPos.y;
+            double relZ = pos.z - camPos.z;
+
+            MatrixStack matrices = new MatrixStack();
+            matrices.translate(relX, relY, relZ);
+            drawBeam(matrices);
+        }
+
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
     }
 
-    public static String get(String englishName) {
-        return NAMES.get(englishName.toLowerCase().replace("-", "_").replace(" ", "_"));
+    private static void drawBeam(MatrixStack matrices) {
+        Matrix4f model = matrices.peek().getPositionMatrix();
+
+        BufferBuilder buffer = Tessellator.getInstance().begin(VertexFormat.DrawMode.QUADS, VertexFormats.POSITION_COLOR);
+
+        // Deux plans verticaux croisés à 90° pour que le faisceau soit visible depuis n'importe quel angle
+        addQuad(buffer, model, -HALF_WIDTH, 0,  HALF_WIDTH, 0);
+        addQuad(buffer, model, 0, -HALF_WIDTH, 0,  HALF_WIDTH);
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+    }
+
+    // Dessine un quad vertical de y=0 (sol, près du Pokémon) à y=BEAM_HEIGHT (ciel),
+    // entre deux points horizontaux (x1,z1) et (x2,z2)
+    private static void addQuad(BufferBuilder buffer, Matrix4f model, double x1, double z1, double x2, double z2) {
+        buffer.vertex(model, (float) x1, 0f, (float) z1).color(R, G, B, ALPHA_BAS);
+        buffer.vertex(model, (float) x2, 0f, (float) z2).color(R, G, B, ALPHA_BAS);
+        buffer.vertex(model, (float) x2, (float) BEAM_HEIGHT, (float) z2).color(R, G, B, ALPHA_HAUT);
+        buffer.vertex(model, (float) x1, (float) BEAM_HEIGHT, (float) z1).color(R, G, B, ALPHA_HAUT);
     }
 }
