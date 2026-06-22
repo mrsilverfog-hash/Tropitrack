@@ -6,6 +6,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
@@ -37,7 +38,14 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     private static final Set<String> trackedPokemons = new HashSet<>();
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
-    
+
+    // Pokémon shiny actuellement chargés, utilisé par ShinyBeamRenderer pour dessiner le faisceau
+    private static final Set<PokemonEntity> activeShinyEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static Set<PokemonEntity> getActiveShinyEntities() {
+        return activeShinyEntities;
+    }
+
     private static class TrackedPending {
         PokemonEntity entity;
         int ticksLeft;
@@ -81,6 +89,9 @@ public class TropiTrackerClient implements ClientModInitializer {
             "TropiTracker"
         ));
 
+        // Rendu du faisceau doré au-dessus des Pokémon shiny, visible à travers les blocs
+        WorldRenderEvents.AFTER_TRANSLUCENT.register(ShinyBeamRenderer::render);
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;
 
@@ -90,6 +101,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 teleportCooldown = 60;
                 pendingEntities.clear();
                 seenEntities.clear();
+                activeShinyEntities.clear();
                 loopActive = false;
                 activeLoopSound = null;
                 activeLoopVolume = 1.0f;
@@ -162,26 +174,36 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Scan du monde réel toutes les secondes (20 ticks) pour mettre à jour la boucle sonore
+            // Scan du monde réel toutes les secondes (20 ticks) : met à jour la boucle sonore
+            // et la liste des Pokémon shiny actifs (pour le faisceau)
             scanTick++;
             if (scanTick >= 20) {
                 scanTick = 0;
                 boolean specialFound = false;
                 SoundEvent foundSound = null;
                 float foundVolume = 1.0f;
+                Set<PokemonEntity> currentShinies = new HashSet<>();
 
                 for (Entity e : client.world.getEntities()) {
                     if (!(e instanceof PokemonEntity pe)) continue;
                     if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
 
-                    SoundEvent detectedSound = getSpecialSound(pe.getPokemon());
-                    if (detectedSound != null) {
-                        specialFound = true;
-                        foundSound = detectedSound;
-                        foundVolume = (pe.getPokemon().getShiny() && enableShiny) ? 3.0f : 1.0f;
-                        break; 
+                    if (enableShiny && pe.getPokemon().getShiny()) {
+                        currentShinies.add(pe);
+                    }
+
+                    if (!specialFound) {
+                        SoundEvent detectedSound = getSpecialSound(pe.getPokemon());
+                        if (detectedSound != null) {
+                            specialFound = true;
+                            foundSound = detectedSound;
+                            foundVolume = (pe.getPokemon().getShiny() && enableShiny) ? 3.0f : 1.0f;
+                        }
                     }
                 }
+
+                activeShinyEntities.clear();
+                activeShinyEntities.addAll(currentShinies);
 
                 if (specialFound) {
                     activeLoopSound = foundSound;
@@ -221,6 +243,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             java.util.UUID uuid = entity.getUuid();
             seenEntities.remove(uuid);
             pendingEntities.remove(uuid);
+            activeShinyEntities.remove(entity);
         });
 
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
