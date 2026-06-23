@@ -64,6 +64,9 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static float activeLoopVolume = 1.0f;
     private static boolean loopActive = false;
 
+    private static final float SHINY_VOLUME = 3.0f;
+    private static final float TRACKED_VOLUME = 2.0f;
+
     private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
     private static final Set<String> MYTHIC_LABELS      = Set.of("mythical");
     private static final Set<String> ULTRA_BEAST_LABELS = Set.of("ultra_beast");
@@ -197,7 +200,9 @@ public class TropiTrackerClient implements ClientModInitializer {
                         if (detectedSound != null) {
                             specialFound = true;
                             foundSound = detectedSound;
-                            foundVolume = (pe.getPokemon().getShiny() && enableShiny) ? 3.0f : 1.0f;
+                            boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
+                            boolean trackedMatch = isTrackedMatch(pe.getPokemon());
+                            foundVolume = shinyMatch ? SHINY_VOLUME : (trackedMatch ? TRACKED_VOLUME : 1.0f);
                         }
                     }
                 }
@@ -315,6 +320,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!message.isEmpty() && !muted) {
             SoundEvent finalSound = sound;
             boolean bigAlert = isShiny && enableShiny;
+            boolean trackedAlert = isTrackedMatch(pokemon);
             String finalDisplayName = frenchName;
             String finalMessage = message;
 
@@ -324,10 +330,11 @@ public class TropiTrackerClient implements ClientModInitializer {
                     client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
                     client.inGameHud.setTitleTicks(5, 70, 20); // fade-in, maintien, fade-out
-                    client.player.playSound(finalSound, 3.0f, 1.0f); // volume x3
+                    client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
                 } else {
+                    float volume = trackedAlert ? TRACKED_VOLUME : 1.0f;
                     client.player.sendMessage(Text.literal(finalMessage), false);
-                    client.player.playSound(finalSound, 1.0f, 1.0f);
+                    client.player.playSound(finalSound, volume, 1.0f);
                 }
             });
         }
@@ -367,6 +374,17 @@ public class TropiTrackerClient implements ClientModInitializer {
             if (targets.contains(label.toLowerCase())) return true;
         }
         return false;
+    }
+
+    private static boolean isTrackedMatch(Pokemon pokemon) {
+        if (trackedPokemons.isEmpty()) return false;
+        String speciesName = pokemon.getSpecies().getName().toLowerCase();
+        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
+            frenchName = pokemon.getSpecies().getName();
+        }
+        String frLower = frenchName.toLowerCase();
+        return trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName);
     }
 
     private String capitalize(String s) {
