@@ -1,7 +1,5 @@
 package net.tropimon.tropitracker;
 
-import com.cobblemon.mod.common.api.pokemon.PokemonSpecies;
-import com.cobblemon.mod.common.pokemon.Species;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 
 import java.util.regex.Matcher;
@@ -130,16 +128,8 @@ public class CatchDetector {
         lastMatchTime = now;
     }
 
-    /** Résout un nom localisé (ex: "Crabicoque") vers le nom d'espèce anglais en minuscule (ex: "crabrawler"). */
+    /** Résout un nom localisé (ex: "Crabicoque") vers le nom d'espèce anglais en minuscule (ex: "crustle"). */
     private static String findSpeciesNameByLocalizedName(String localizedName) {
-        try {
-            for (Species species : PokemonSpecies.INSTANCE.getImplemented()) {
-                if (species.getTranslatedName().getString().equalsIgnoreCase(localizedName)
-                    || species.getName().equalsIgnoreCase(localizedName)) {
-                    return species.getName().toLowerCase();
-                }
-            }
-        } catch (Exception ignored) {}
-        return null;
+        return FrenchNames.getEnglishName(localizedName);
     }
 }
