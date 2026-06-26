@@ -299,4 +299,17 @@ public class FrenchNames {
     public static String get(String englishName) {
         return NAMES.get(englishName.toLowerCase().replace("-", "_").replace(" ", "_"));
     }
+
+    private static final Map<String, String> REVERSE = new HashMap<>();
+    static {
+        for (Map.Entry<String, String> entry : NAMES.entrySet()) {
+            REVERSE.putIfAbsent(entry.getValue().toLowerCase(), entry.getKey());
+        }
+    }
+
+    /** Résout un nom français (ex: "Crabicoque") vers le nom d'espèce anglais en minuscule (ex: "crustle"). */
+    public static String getEnglishName(String frenchName) {
+        if (frenchName == null) return null;
+        return REVERSE.get(frenchName.toLowerCase());
+    }
 }
