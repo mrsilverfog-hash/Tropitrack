@@ -32,14 +32,15 @@ public class CatchDetector {
 
     private static long lastMatchTime = 0L;
 
-    // TODO : à ajuster avec le texte exact du message "équipe pleine -> envoyé au PC" de Tropimon
+    // Calé sur : "Votre équipe est pleine ! Abo a été ajouté à votre PC."
     private static final Pattern PC_FR_REGEX = Pattern.compile(
-        "[ÉE]quipe (?:est )?pleine.*?(.+?) (?:est |a été )?envoyé.* (?:au|à votre) PC"
+        "Votre équipe est pleine ! (.+) a été ajouté(?:e)? à votre PC\\."
     );
 
-    // TODO : à ajuster avec le texte exact du/des message(s) de confirmation de chasse complétée
+    // Calé sur : "Chasse complétée (+100₽ et +50₽ pour ta ville) (+70 points d'événement)"
+    // Les montants varient selon la difficulté (100/50, 200/100, 300/150...), mais "Chasse complétée" reste fixe
     private static final Pattern COMPLETION_REGEX = Pattern.compile(
-        "Chasse (?:complétée|terminée|réussie)"
+        "Chasse complétée"
     );
 
     public static void register() {
