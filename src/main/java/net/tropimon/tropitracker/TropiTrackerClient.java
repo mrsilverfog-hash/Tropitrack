@@ -37,6 +37,8 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static boolean enableShiny      = true;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
+    // Pokémon trackés automatiquement depuis le tableau de chasse (rafraîchi à chaque ouverture du tableau)
+    private static final Set<String> boardTrackedPokemons = new HashSet<>();
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
 
     // Pokémon shiny actuellement chargés, utilisé par ShinyBeamRenderer pour dessiner le faisceau
@@ -94,6 +96,9 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         // Rendu du faisceau doré vers les Pokémon shiny, visible à travers les blocs
         WorldRenderEvents.LAST.register(ShinyBeamRenderer::render);
+
+        // Détection automatique du tableau de chasse (TropimodClient)
+        BoardDetector.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;
@@ -280,6 +285,30 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
+    /**
+     * Appelé par BoardDetector quand le tableau de chasse est lu.
+     * Remplace entièrement la liste des pokémon trackés depuis le tableau
+     * (les pokémon trackés manuellement via /track ne sont pas affectés).
+     */
+    public static void setBoardTargets(Set<String> speciesNames) {
+        Set<String> newSet = new HashSet<>();
+        for (String speciesName : speciesNames) {
+            newSet.add(speciesName.toLowerCase());
+            String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+            if (!frenchName.equals("cobblemon.species." + speciesName + ".name")) {
+                newSet.add(frenchName.toLowerCase());
+            }
+        }
+        boardTrackedPokemons.clear();
+        boardTrackedPokemons.addAll(newSet);
+        System.out.println("[TropiTracker] Tableau de chasse : " + speciesNames.size() + " pokémon trackés automatiquement.");
+    }
+
+    private static boolean isTracked(String frLower, String speciesName) {
+        return trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName)
+            || boardTrackedPokemons.contains(frLower) || boardTrackedPokemons.contains(speciesName);
+    }
+
     private void handleSpawn(PokemonEntity pe) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
@@ -315,7 +344,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         String message = "";
 
         String frLower = frenchName.toLowerCase();
-        if (!trackedPokemons.isEmpty() && (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
+        if (isTracked(frLower, speciesName)) {
             message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
         } else if (isShiny && enableShiny) {
             message = "§6✨ Pokémon Shiny sauvage apparu : §e" + frenchName + " §6✨";
@@ -368,7 +397,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         Set<String> labels = pokemon.getSpecies().getLabels();
         boolean isShiny = pokemon.getShiny();
 
-        if (!trackedPokemons.isEmpty() && (trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName))) {
+        if (isTracked(frLower, speciesName)) {
             return INCLUDED_SOUND;
         } else if (isShiny && enableShiny) {
             return SHINY_SOUND;
@@ -392,14 +421,14 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private static boolean isTrackedMatch(Pokemon pokemon) {
-        if (trackedPokemons.isEmpty()) return false;
+        if (trackedPokemons.isEmpty() && boardTrackedPokemons.isEmpty()) return false;
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
         String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
         }
         String frLower = frenchName.toLowerCase();
-        return trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName);
+        return isTracked(frLower, speciesName);
     }
 
     private String capitalize(String s) {
