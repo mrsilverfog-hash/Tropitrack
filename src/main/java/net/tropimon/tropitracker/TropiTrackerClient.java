@@ -39,6 +39,8 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static final Set<String> trackedPokemons = new HashSet<>();
     // Pokémon trackés automatiquement depuis le tableau de chasse (rafraîchi à chaque ouverture du tableau)
     private static final Set<String> boardTrackedPokemons = new HashSet<>();
+    // Version "canonique" (nom anglais uniquement) du set ci-dessus, utilisée par CatchDetector pour le comptage/retrait
+    private static final Set<String> boardSpeciesCanonical = new HashSet<>();
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
 
     // Pokémon shiny actuellement chargés, utilisé par ShinyBeamRenderer pour dessiner le faisceau
@@ -99,6 +101,9 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         // Détection automatique du tableau de chasse (TropimodClient)
         BoardDetector.register();
+
+        // Détection de capture pour retirer automatiquement les cibles du tableau une fois capturées
+        CatchDetector.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;
@@ -293,15 +298,63 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static void setBoardTargets(Set<String> speciesNames) {
         Set<String> newSet = new HashSet<>();
         for (String speciesName : speciesNames) {
-            newSet.add(speciesName.toLowerCase());
-            String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
-            if (!frenchName.equals("cobblemon.species." + speciesName + ".name")) {
+            String lower = speciesName.toLowerCase();
+            newSet.add(lower);
+            String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + lower + ".name");
+            if (!frenchName.equals("cobblemon.species." + lower + ".name")) {
                 newSet.add(frenchName.toLowerCase());
             }
         }
         boardTrackedPokemons.clear();
         boardTrackedPokemons.addAll(newSet);
+
+        boardSpeciesCanonical.clear();
+        for (String speciesName : speciesNames) {
+            boardSpeciesCanonical.add(speciesName.toLowerCase());
+        }
+
         System.out.println("[TropiTracker] Tableau de chasse : " + speciesNames.size() + " pokémon trackés automatiquement.");
+    }
+
+    /**
+     * Retire un pokémon du tracking automatique (appelé par CatchDetector une fois la capture confirmée).
+     * Ne touche pas aux pokémon trackés manuellement via /track.
+     */
+    public static void removeBoardTarget(String speciesName) {
+        String lower = speciesName.toLowerCase();
+        if (!boardSpeciesCanonical.remove(lower)) return;
+
+        boardTrackedPokemons.remove(lower);
+        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + lower + ".name");
+        if (!frenchName.equals("cobblemon.species." + lower + ".name")) {
+            boardTrackedPokemons.remove(frenchName.toLowerCase());
+        }
+
+        System.out.println("[TropiTracker] Capture confirmée, retiré du tracking automatique : " + lower);
+
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null) {
+            client.player.sendMessage(
+                Text.literal("§aTropiTracker : §f" + capitalize(lower) + " §acapturé, retiré du tableau de chasse."),
+                false
+            );
+        }
+    }
+
+    public static boolean isBoardTracked(String speciesNameLower) {
+        return boardSpeciesCanonical.contains(speciesNameLower);
+    }
+
+    public static int getBoardTrackedCount() {
+        return boardSpeciesCanonical.size();
+    }
+
+    /** Retourne le nom de l'espèce si une seule cible reste trackée depuis le tableau, sinon null. */
+    public static String getBoardTrackedSpeciesIfUnique() {
+        if (boardSpeciesCanonical.size() == 1) {
+            return boardSpeciesCanonical.iterator().next();
+        }
+        return null;
     }
 
     private static boolean isTracked(String frLower, String speciesName) {
@@ -431,7 +484,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         return isTracked(frLower, speciesName);
     }
 
-    private String capitalize(String s) {
+    private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s;
         return Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
