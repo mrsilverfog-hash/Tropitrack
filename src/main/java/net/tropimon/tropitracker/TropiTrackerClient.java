@@ -42,6 +42,10 @@ public class TropiTrackerClient implements ClientModInitializer {
     // Version "canonique" (nom anglais uniquement) du set ci-dessus, utilisée par CatchDetector pour le comptage/retrait
     private static final Set<String> boardSpeciesCanonical = new HashSet<>();
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
+    // Pokémon pour lesquels l'alerte (message + son ponctuel) a déjà été envoyée,
+    // que ce soit via l'apparition fraîche (ENTITY_LOAD) ou via le scan périodique
+    // (cas d'un pokémon déjà présent avant que le tracking ne se déclenche)
+    private static final Set<java.util.UUID> announcedEntities = new HashSet<>();
 
     // Pokémon shiny actuellement chargés, utilisé par ShinyBeamRenderer pour dessiner le faisceau
     private static final Set<PokemonEntity> activeShinyEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -58,7 +62,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             this.ticksLeft = ticksLeft;
         }
     }
-    
+
     private static final java.util.Map<java.util.UUID, TrackedPending> pendingEntities = new java.util.HashMap<>();
 
     // Gestion de la boucle de rappel sonore
@@ -114,6 +118,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 teleportCooldown = 60;
                 pendingEntities.clear();
                 seenEntities.clear();
+                announcedEntities.clear();
                 activeShinyEntities.clear();
                 loopActive = false;
                 activeLoopSound = null;
@@ -133,7 +138,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 double distSq = (currentX - lastX) * (currentX - lastX) +
                                 (currentY - lastY) * (currentY - lastY) +
                                 (currentZ - lastZ) * (currentZ - lastZ);
-                if (distSq > 64) { 
+                if (distSq > 64) {
                     teleportCooldown = 40;
                 }
             }
@@ -158,30 +163,30 @@ public class TropiTrackerClient implements ClientModInitializer {
             // Gestion de la file d'attente avec vérification d'appartenance renforcée
             if (!pendingEntities.isEmpty()) {
                 java.util.List<java.util.UUID> toRemove = new java.util.ArrayList<>();
-                
+
                 for (java.util.Map.Entry<java.util.UUID, TrackedPending> entry : pendingEntities.entrySet()) {
                     java.util.UUID uuid = entry.getKey();
                     TrackedPending pending = entry.getValue();
                     PokemonEntity pe = pending.entity;
-                    
+
                     if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) {
                         toRemove.add(uuid);
                         seenEntities.add(uuid);
                         continue;
                     }
-                    
+
                     pending.ticksLeft--;
-                    
+
                     if (pending.ticksLeft <= 0) {
                         toRemove.add(uuid);
                         seenEntities.add(uuid);
-                        
+
                         if (pe.getBattleId() == null) {
                             handleSpawn(pe);
                         }
                     }
                 }
-                
+
                 for (java.util.UUID uuid : toRemove) {
                     pendingEntities.remove(uuid);
                 }
@@ -205,15 +210,20 @@ public class TropiTrackerClient implements ClientModInitializer {
                         currentShinies.add(pe);
                     }
 
-                    if (!specialFound) {
-                        SoundEvent detectedSound = getSpecialSound(pe.getPokemon());
-                        if (detectedSound != null) {
-                            specialFound = true;
-                            foundSound = detectedSound;
-                            boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
-                            boolean trackedMatch = isTrackedMatch(pe.getPokemon());
-                            foundVolume = shinyMatch ? SHINY_VOLUME : (trackedMatch ? TRACKED_VOLUME : 1.0f);
-                        }
+                    SoundEvent detectedSound = getSpecialSound(pe.getPokemon());
+
+                    // Annonce (message + son ponctuel) tout pokémon spécial/tracké pas encore signalé,
+                    // y compris ceux déjà présents au moment où ils deviennent trackés (tableau de chasse)
+                    if (detectedSound != null && !announcedEntities.contains(pe.getUuid())) {
+                        handleSpawn(pe);
+                    }
+
+                    if (!specialFound && detectedSound != null) {
+                        specialFound = true;
+                        foundSound = detectedSound;
+                        boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
+                        boolean trackedMatch = isTrackedMatch(pe.getPokemon());
+                        foundVolume = shinyMatch ? SHINY_VOLUME : (trackedMatch ? TRACKED_VOLUME : 1.0f);
                     }
                 }
 
@@ -245,7 +255,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         ClientEntityEvents.ENTITY_LOAD.register((entity, world) -> {
             if (!(entity instanceof PokemonEntity pokemonEntity)) return;
-            
+
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID) || pendingEntities.containsKey(entityUUID)) return;
 
@@ -258,6 +268,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             java.util.UUID uuid = entity.getUuid();
             seenEntities.remove(uuid);
             pendingEntities.remove(uuid);
+            announcedEntities.remove(uuid);
             activeShinyEntities.remove(entity);
         });
 
@@ -362,7 +373,28 @@ public class TropiTrackerClient implements ClientModInitializer {
             || boardTrackedPokemons.contains(frLower) || boardTrackedPokemons.contains(speciesName);
     }
 
-    private void handleSpawn(PokemonEntity pe) {
+    /**
+     * Rescanne tous les Pokémon déjà présents dans le monde après une mise à jour du tableau de chasse.
+     * Sans ça, un Pokémon déjà chargé AVANT que le tableau ne soit lu ne déclencherait jamais
+     * l'alerte (ENTITY_LOAD ne se reproduit pas), même s'il devient une cible trackée :
+     * seul le son de la boucle périodique se déclencherait, sans le message associé.
+     */
+    public static void recheckAfterBoardUpdate() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null) return;
+
+        for (Entity e : client.world.getEntities()) {
+            if (!(e instanceof PokemonEntity pe)) continue;
+            if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+            if (pe.getBattleId() != null) continue;
+            if (announcedEntities.contains(pe.getUuid())) continue;
+            if (!isTrackedMatch(pe.getPokemon())) continue;
+
+            handleSpawn(pe);
+        }
+    }
+
+    private static void handleSpawn(PokemonEntity pe) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
 
@@ -384,8 +416,12 @@ public class TropiTrackerClient implements ClientModInitializer {
             return;
         }
 
+        // Marqué comme signalé avant tout traitement, pour que le scan périodique
+        // ne ré-annonce pas la même entité juste après
+        announcedEntities.add(pe.getUuid());
+
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        
+
         // Traduction automatique via le système officiel du jeu
         String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
@@ -439,14 +475,14 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     private static SoundEvent getSpecialSound(Pokemon pokemon) {
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        
+
         // Traduction automatique pour garder la cohérence du scanner
         String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
         }
         String frLower = frenchName.toLowerCase();
-        
+
         Set<String> labels = pokemon.getSpecies().getLabels();
         boolean isShiny = pokemon.getShiny();
 
