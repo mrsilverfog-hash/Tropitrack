@@ -67,6 +67,7 @@ public class BoardDetector {
             }
 
             TropiTrackerClient.setBoardTargets(speciesNames);
+            TropiTrackerClient.recheckAfterBoardUpdate();
 
             MinecraftClient client = MinecraftClient.getInstance();
             if (client.player != null && !speciesNames.isEmpty()) {
