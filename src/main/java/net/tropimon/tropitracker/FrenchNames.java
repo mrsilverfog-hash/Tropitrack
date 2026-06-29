@@ -296,6 +296,67 @@ public class FrenchNames {
         NAMES.put("sandy_shocks", "Pelage-Sablé"); NAMES.put("roaring_moon", "Rugit-Lune");
         NAMES.put("walking_wake", "Serpente-Eau"); NAMES.put("gouging_fire", "Feu-Perçant");
         NAMES.put("raging_bolt", "Ire-Foudre"); NAMES.put("great_tusk", "Fort-Ivoire");
+
+        // Entrées manquantes ajoutées lors de l'audit complet
+        NAMES.put("arctozolt", "Galvagla"); NAMES.put("ariados", "Migalos"); NAMES.put("armaldo", "Armaldo");
+        NAMES.put("aromatisse", "Cocotine"); NAMES.put("aron", "Galekid"); NAMES.put("baxcalibur", "Glaivodo");
+        NAMES.put("bellossom", "Joliflor"); NAMES.put("binacle", "Opermine"); NAMES.put("boldore", "Géolithe");
+        NAMES.put("braixen", "Roussil"); NAMES.put("brionne", "Otarlette"); NAMES.put("buzzwole", "Mouscoto");
+        NAMES.put("carkol", "Wagomine"); NAMES.put("cascoon", "Blindalys"); NAMES.put("celesteela", "Bamboiselle");
+        NAMES.put("centiskorch", "Scolocendre"); NAMES.put("charcadet", "Charbambin"); NAMES.put("chatot", "Pijako");
+        NAMES.put("cherrim", "Ceriflor"); NAMES.put("cherubi", "Ceribou"); NAMES.put("chi_yu", "Yuyu");
+        NAMES.put("chien_pao", "Baojian"); NAMES.put("combee", "Apitrini"); NAMES.put("combusken", "Galifeu");
+        NAMES.put("corphish", "Écrapince"); NAMES.put("corsola", "Corayon"); NAMES.put("cradily", "Vacilys");
+        NAMES.put("crocalor", "Crocogril"); NAMES.put("cyclizar", "Motorizard"); NAMES.put("dachsbun", "Briochien");
+        NAMES.put("deerling", "Vivaldaim"); NAMES.put("dewpider", "Araqua"); NAMES.put("dipplin", "Pomdramour");
+        NAMES.put("dondozo", "Oyacata"); NAMES.put("dottler", "Coléodôme"); NAMES.put("doublade", "Dimoclès");
+        NAMES.put("drampa", "Draïeul"); NAMES.put("ducklett", "Couaneton"); NAMES.put("dudunsparce", "Deusolourdo");
+        NAMES.put("eiscue", "Bekaglaçon"); NAMES.put("ekans", "Abo"); NAMES.put("eldegoss", "Blancoton");
+        NAMES.put("enamorus", "Amovénus"); NAMES.put("espathra", "Cléopsytra"); NAMES.put("fezandipiti", "Favianos");
+        NAMES.put("finizen", "Dofin"); NAMES.put("finneon", "Écayon"); NAMES.put("flareon", "Pyroli");
+        NAMES.put("flittle", "Flotillon"); NAMES.put("floragato", "Matourgeon"); NAMES.put("frigibax", "Frigodo");
+        NAMES.put("garganacl", "Gigansel"); NAMES.put("girafarig", "Girafarig"); NAMES.put("glastrier", "Blizzeval");
+        NAMES.put("gourgeist", "Banshitrouye"); NAMES.put("grafaiai", "Tag-Tag"); NAMES.put("granbull", "Granbull");
+        NAMES.put("greedent", "Rongrigou"); NAMES.put("grimmsnarl", "Angoliath"); NAMES.put("gumshoos", "Argouste");
+        NAMES.put("guzzlord", "Engloutyran"); NAMES.put("hakamo_o", "Écaïd"); NAMES.put("hoothoot", "Hoothoot");
+        NAMES.put("houndstone", "Tomberro"); NAMES.put("hydrapple", "Pomdorochi"); NAMES.put("impidimp", "Grimalin");
+        NAMES.put("infernape", "Simiabraz"); NAMES.put("inkay", "Sepiatop"); NAMES.put("ivysaur", "Herbizarre");
+        NAMES.put("jangmo_o", "Bébécaille"); NAMES.put("kangaskhan", "Kangourex"); NAMES.put("karrablast", "Carabing");
+        NAMES.put("keldeo", "Keldeo"); NAMES.put("kleavor", "Hachécateur"); NAMES.put("koffing", "Smogo");
+        NAMES.put("lairon", "Galegon"); NAMES.put("lampent", "Mélancolux"); NAMES.put("lechonk", "Gourmelet");
+        NAMES.put("litten", "Flamiaou"); NAMES.put("lurantis", "Floramantis"); NAMES.put("lycanroc", "Lougaroc");
+        NAMES.put("mabosstiff", "Dogrino"); NAMES.put("magearna", "Magearna"); NAMES.put("makuhita", "Makuhita");
+        NAMES.put("malamar", "Sepiatroce"); NAMES.put("marshtomp", "Flobio"); NAMES.put("maschiff", "Grondogue");
+        NAMES.put("maushold", "Famignol"); NAMES.put("meloetta", "Meloetta"); NAMES.put("meowstic", "Mistigrix");
+        NAMES.put("miltank", "Écrémeuh"); NAMES.put("minior", "Météno"); NAMES.put("mudbray", "Tiboudet");
+        NAMES.put("muk", "Grotadmorv"); NAMES.put("munchlax", "Goinfrex"); NAMES.put("munkidori", "Fortusimia");
+        NAMES.put("munna", "Munna"); NAMES.put("nosepass", "Tarinor"); NAMES.put("nymble", "Lilliterelle");
+        NAMES.put("obstagoon", "Ixon"); NAMES.put("ogerpon", "Ogerpon"); NAMES.put("okidogi", "Félicanis");
+        NAMES.put("palafin", "Superdofin"); NAMES.put("patrat", "Ratentif"); NAMES.put("pawmo", "Pohmotte");
+        NAMES.put("perrserker", "Berserkatt"); NAMES.put("phanpy", "Phanpy"); NAMES.put("pignite", "Grotichon");
+        NAMES.put("pineco", "Pomdepik"); NAMES.put("politoed", "Tarpaud"); NAMES.put("poltchageist", "Poltchageist");
+        NAMES.put("popplio", "Otaquin"); NAMES.put("pumpkaboo", "Pitrouille"); NAMES.put("purrloin", "Chacripan");
+        NAMES.put("quagsire", "Maraiste"); NAMES.put("quilava", "Feurisson"); NAMES.put("quilladin", "Boguérisse");
+        NAMES.put("raboot", "Lapyro"); NAMES.put("revavroom", "Vrombotor"); NAMES.put("rillaboom", "Gorythmic");
+        NAMES.put("rolycoly", "Charbi"); NAMES.put("rowlet", "Brindibou"); NAMES.put("sableye", "Ténéfix");
+        NAMES.put("salamence", "Drattak"); NAMES.put("scolipede", "Brutapode"); NAMES.put("scovillain", "Scovilain");
+        NAMES.put("seismitoad", "Crapustule"); NAMES.put("sewaddle", "Larveyette"); NAMES.put("sharpedo", "Sharpedo");
+        NAMES.put("shroomish", "Balignon"); NAMES.put("silcoon", "Armulys"); NAMES.put("silicobra", "Dunaja");
+        NAMES.put("simipour", "Flotoutan"); NAMES.put("simisage", "Feuiloutan"); NAMES.put("simisear", "Flamoutan");
+        NAMES.put("sinistcha", "Théffroyable"); NAMES.put("skorupi", "Rapion"); NAMES.put("skwovet", "Rongourmand");
+        NAMES.put("snom", "Frissonille"); NAMES.put("spidops", "Filentrappe"); NAMES.put("sprigatito", "Poussacha");
+        NAMES.put("swadloon", "Couverdure"); NAMES.put("swalot", "Avaltout"); NAMES.put("swellow", "Hélédelle");
+        NAMES.put("swoobat", "Rhinolove"); NAMES.put("tadbulb", "Têtampoule"); NAMES.put("tapu_bulu", "Tokotoro");
+        NAMES.put("tapu_fini", "Tokopisco"); NAMES.put("tapu_koko", "Tokorico"); NAMES.put("tapu_lele", "Tokopiyon");
+        NAMES.put("terapagos", "Terapagos"); NAMES.put("thwackey", "Badabouin"); NAMES.put("ting_lu", "Dinglu");
+        NAMES.put("togedemaru", "Togedemaru"); NAMES.put("toucannon", "Bazoucan"); NAMES.put("turtonator", "Boumata");
+        NAMES.put("typhlosion", "Typhlosion"); NAMES.put("tyrunt", "Ptyranidur"); NAMES.put("varoom", "Vrombi");
+        NAMES.put("veluza", "Délestin"); NAMES.put("victreebel", "Empiflor"); NAMES.put("wattrel", "Zapétrel");
+        NAMES.put("whismur", "Chuchmur"); NAMES.put("wiglett", "Taupikeau"); NAMES.put("wimpod", "Sovkipou");
+        NAMES.put("wingull", "Goélise"); NAMES.put("wo_chien", "Chongjian"); NAMES.put("woobat", "Chovsourir");
+        NAMES.put("wooloo", "Moumouton"); NAMES.put("wugtrio", "Triopikeau"); NAMES.put("wynaut", "Okéoké");
+        NAMES.put("wyrdeer", "Cerbyllin"); NAMES.put("yungoos", "Manglouton"); NAMES.put("zacian", "Zacian");
+        NAMES.put("zamazenta", "Zamazenta");
     }
 
     public static String get(String englishName) {
