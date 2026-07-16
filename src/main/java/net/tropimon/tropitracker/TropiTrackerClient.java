@@ -344,12 +344,17 @@ public class TropiTrackerClient implements ClientModInitializer {
         System.out.println("[TropiTracker] Capture confirmée, retiré du tracking automatique : " + lower);
 
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null) {
-            client.player.sendMessage(
-                Text.literal("§aTropiTracker : §f" + capitalize(lower) + " §acapturé, retiré du tableau de chasse."),
-                false
-            );
-        }
+        // client.execute() diffère l'envoi au prochain tick : on ne doit JAMAIS ajouter
+        // un message au chat pendant le traitement d'un message entrant, sous peine de
+        // ConcurrentModificationException -> déconnexion du serveur
+        client.execute(() -> {
+            if (client.player != null) {
+                client.player.sendMessage(
+                    Text.literal("§aTropiTracker : §f" + capitalize(lower) + " §acapturé, retiré du tableau de chasse."),
+                    false
+                );
+            }
+        });
     }
 
     public static boolean isBoardTracked(String speciesNameLower) {
