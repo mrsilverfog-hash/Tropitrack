@@ -43,25 +43,32 @@ public class CatchDetector {
 
     public static void register() {
         ClientReceiveMessageEvents.GAME.register((message, overlay) -> {
-            if (overlay) return;
-            if (TropiTrackerClient.getBoardTrackedCount() == 0) return;
+            try {
+                if (overlay) return;
+                if (TropiTrackerClient.getBoardTrackedCount() == 0) return;
 
-            String text = message.getString();
+                String text = message.getString();
 
-            Matcher pcMatch = PC_FR_REGEX.matcher(text);
-            if (pcMatch.find()) {
-                String pokemonName = pcMatch.group(1).trim();
-                String speciesName = findSpeciesNameByLocalizedName(pokemonName);
-                if (speciesName != null) {
-                    onCatchDetected(speciesName);
-                } else {
-                    System.out.println("[TropiTracker][Catch] Pokémon '" + pokemonName + "' détecté envoyé au PC, mais espèce non résolue.");
+                Matcher pcMatch = PC_FR_REGEX.matcher(text);
+                if (pcMatch.find()) {
+                    String pokemonName = pcMatch.group(1).trim();
+                    String speciesName = findSpeciesNameByLocalizedName(pokemonName);
+                    if (speciesName != null) {
+                        onCatchDetected(speciesName);
+                    } else {
+                        System.out.println("[TropiTracker][Catch] Pokémon '" + pokemonName + "' détecté envoyé au PC, mais espèce non résolue.");
+                    }
+                    return;
                 }
-                return;
-            }
 
-            if (COMPLETION_REGEX.matcher(text).find()) {
-                onCompletionMessage();
+                if (COMPLETION_REGEX.matcher(text).find()) {
+                    onCompletionMessage();
+                }
+            } catch (Exception e) {
+                // Ne JAMAIS laisser une exception remonter dans la pile réseau :
+                // ça provoquerait une déconnexion du serveur ("Internal Exception")
+                System.out.println("[TropiTracker][Catch] Erreur interceptée : " + e);
+                e.printStackTrace();
             }
         });
 
@@ -128,7 +135,7 @@ public class CatchDetector {
         lastMatchTime = now;
     }
 
-    /** Résout un nom localisé (ex: "Crabicoque") vers le nom d'espèce anglais en minuscule (ex: "crustle"). */
+    /** Résout un nom localisé (ex: "Crabicoque") vers le nom d'espèce anglais en minuscule (ex: "dwebble"). */
     private static String findSpeciesNameByLocalizedName(String localizedName) {
         return FrenchNames.getEnglishName(localizedName);
     }
