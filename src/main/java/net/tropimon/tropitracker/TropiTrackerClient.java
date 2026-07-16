@@ -398,6 +398,10 @@ public class TropiTrackerClient implements ClientModInitializer {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
 
+        // Garde anti-doublon : un pokémon déjà annoncé (par n'importe quel chemin :
+        // file d'attente ENTITY_LOAD ou scan périodique) ne doit jamais l'être une 2e fois
+        if (announcedEntities.contains(pe.getUuid())) return;
+
         Pokemon pokemon = pe.getPokemon();
         System.out.println("[DEBUG_SHINY] handleSpawn appelé pour : " + pokemon.getSpecies().getName()
             + " | shiny=" + pokemon.getShiny()
