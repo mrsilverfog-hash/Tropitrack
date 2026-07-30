@@ -170,6 +170,13 @@ public class TropiTrackerClient implements ClientModInitializer {
                     PokemonEntity pe = pending.entity;
 
                     if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) {
+                        // Pokémon d'un dresseur — déclencher uniquement si shiny en combat spectateur
+                        if (!announcedEntities.contains(pe.getUuid())
+                                && pe.getPokemon().getShiny()
+                                && pe.getBattleId() != null
+                                && isBattleScreenOpen()) {
+                            handleBattleShiny(pe);
+                        }
                         toRemove.add(uuid);
                         seenEntities.add(uuid);
                         continue;
@@ -279,6 +286,46 @@ public class TropiTrackerClient implements ClientModInitializer {
                 return false;
             }
             return true;
+        });
+    }
+
+    /**
+     * Retourne true si l'écran de combat Cobblemon est actuellement affiché
+     * (le joueur regarde un combat en tant que spectateur ou participant).
+     */
+    private static boolean isBattleScreenOpen() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.currentScreen == null) return false;
+        String screenClass = client.currentScreen.getClass().getName();
+        return screenClass.contains("BattleScreen");
+    }
+
+    /**
+     * Déclenche l'alerte shiny pour un Pokémon de dresseur envoyé en combat,
+     * uniquement lorsque le joueur regarde ce combat (écran de combat ouvert).
+     * Pas de faisceau ni de boucle sonore — uniquement le titre plein écran + son ponctuel.
+     */
+    private static void handleBattleShiny(PokemonEntity pe) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null) return;
+        if (announcedEntities.contains(pe.getUuid())) return;
+
+        announcedEntities.add(pe.getUuid());
+
+        Pokemon pokemon = pe.getPokemon();
+        String speciesName = pokemon.getSpecies().getName().toLowerCase();
+        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
+            frenchName = pokemon.getSpecies().getName();
+        }
+        String finalDisplayName = frenchName;
+
+        client.execute(() -> {
+            if (client.player == null || muted) return;
+            client.inGameHud.setTitle(Text.literal("§6✨ SHINY EN COMBAT ✨"));
+            client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
+            client.inGameHud.setTitleTicks(5, 70, 20);
+            client.player.playSound(SHINY_SOUND, SHINY_VOLUME, 1.0f);
         });
     }
 
