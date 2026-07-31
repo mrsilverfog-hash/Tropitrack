@@ -37,18 +37,17 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static boolean enableShiny      = true;
 
     private static final Set<String> trackedPokemons = new HashSet<>();
-    // Pokémon trackés automatiquement depuis le tableau de chasse (rafraîchi à chaque ouverture du tableau)
     private static final Set<String> boardTrackedPokemons = new HashSet<>();
-    // Version "canonique" (nom anglais uniquement) du set ci-dessus, utilisée par CatchDetector pour le comptage/retrait
     private static final Set<String> boardSpeciesCanonical = new HashSet<>();
     private static final Set<java.util.UUID> seenEntities = new HashSet<>();
-    // Pokémon pour lesquels l'alerte (message + son ponctuel) a déjà été envoyée,
-    // que ce soit via l'apparition fraîche (ENTITY_LOAD) ou via le scan périodique
-    // (cas d'un pokémon déjà présent avant que le tracking ne se déclenche)
     private static final Set<java.util.UUID> announcedEntities = new HashSet<>();
 
     // Pokémon shiny actuellement chargés, utilisé par ShinyBeamRenderer pour dessiner le faisceau
     private static final Set<PokemonEntity> activeShinyEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    // UUIDs des Métamorph non-shiny chargés comme "ditto" : on les ignore même après transformation.
+    // Un Métamorph shiny lui-même (getShiny()=true dès le spawn) reste détectable normalement.
+    private static final Set<java.util.UUID> nonShinyDittoEntities = new HashSet<>();
 
     public static Set<PokemonEntity> getActiveShinyEntities() {
         return activeShinyEntities;
@@ -100,13 +99,8 @@ public class TropiTrackerClient implements ClientModInitializer {
             "TropiTracker"
         ));
 
-        // Rendu du faisceau doré vers les Pokémon shiny, visible à travers les blocs
         WorldRenderEvents.LAST.register(ShinyBeamRenderer::render);
-
-        // Détection automatique du tableau de chasse (TropimodClient)
         BoardDetector.register();
-
-        // Détection de capture pour retirer automatiquement les cibles du tableau une fois capturées
         CatchDetector.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -120,6 +114,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 seenEntities.clear();
                 announcedEntities.clear();
                 activeShinyEntities.clear();
+                nonShinyDittoEntities.clear();
                 loopActive = false;
                 activeLoopSound = null;
                 activeLoopVolume = 1.0f;
@@ -160,7 +155,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Gestion de la file d'attente avec vérification d'appartenance renforcée
+            // Gestion de la file d'attente
             if (!pendingEntities.isEmpty()) {
                 java.util.List<java.util.UUID> toRemove = new java.util.ArrayList<>();
 
@@ -170,8 +165,10 @@ public class TropiTrackerClient implements ClientModInitializer {
                     PokemonEntity pe = pending.entity;
 
                     if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) {
-                        // Pokémon d'un dresseur — déclencher uniquement si shiny en combat spectateur
-                        if (!announcedEntities.contains(pe.getUuid())
+                        // Pokémon d'un dresseur — déclencher uniquement si shiny en combat spectateur,
+                        // et seulement si ce n'est pas un Métamorph transformé
+                        if (!nonShinyDittoEntities.contains(pe.getUuid())
+                                && !announcedEntities.contains(pe.getUuid())
                                 && pe.getPokemon().getShiny()
                                 && pe.getBattleId() != null
                                 && isBattleScreenOpen()) {
@@ -199,8 +196,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Scan du monde réel toutes les secondes (20 ticks) : met à jour la boucle sonore
-            // et la liste des Pokémon shiny actifs (pour le faisceau)
+            // Scan du monde réel toutes les secondes (20 ticks)
             scanTick++;
             if (scanTick >= 20) {
                 scanTick = 0;
@@ -212,6 +208,8 @@ public class TropiTrackerClient implements ClientModInitializer {
                 for (Entity e : client.world.getEntities()) {
                     if (!(e instanceof PokemonEntity pe)) continue;
                     if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+                    // Ne jamais inclure les Métamorph transformés dans le faisceau ou les alertes
+                    if (nonShinyDittoEntities.contains(pe.getUuid())) continue;
 
                     if (enableShiny && pe.getPokemon().getShiny()) {
                         currentShinies.add(pe);
@@ -219,8 +217,6 @@ public class TropiTrackerClient implements ClientModInitializer {
 
                     SoundEvent detectedSound = getSpecialSound(pe.getPokemon());
 
-                    // Annonce (message + son ponctuel) tout pokémon spécial/tracké pas encore signalé,
-                    // y compris ceux déjà présents au moment où ils deviennent trackés (tableau de chasse)
                     if (detectedSound != null && !announcedEntities.contains(pe.getUuid())) {
                         handleSpawn(pe);
                     }
@@ -248,7 +244,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            // Répétition du son toutes les 3 secondes si le Pokémon est toujours là
+            // Répétition du son toutes les 3 secondes
             if (loopActive && !muted && activeLoopSound != null) {
                 soundPlaybackTick++;
                 if (soundPlaybackTick >= 60) {
@@ -266,6 +262,15 @@ public class TropiTrackerClient implements ClientModInitializer {
             java.util.UUID entityUUID = pokemonEntity.getUuid();
             if (seenEntities.contains(entityUUID) || pendingEntities.containsKey(entityUUID)) return;
 
+            // Métamorph non-shiny : mémoriser l'UUID pour ignorer les alertes post-transformation.
+            // Si Métamorph est lui-même shiny dès le spawn (getShiny()=true), on le laisse passer normalement.
+            String speciesAtLoad = pokemonEntity.getPokemon().getSpecies().getName().toLowerCase();
+            if (speciesAtLoad.equals("ditto") && !pokemonEntity.getPokemon().getShiny()) {
+                nonShinyDittoEntities.add(entityUUID);
+                seenEntities.add(entityUUID); // ne jamais mettre en file d'attente
+                return;
+            }
+
             int delay = (teleportCooldown > 0) ? 60 : 20;
             pendingEntities.put(entityUUID, new TrackedPending(pokemonEntity, delay));
         });
@@ -277,6 +282,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             pendingEntities.remove(uuid);
             announcedEntities.remove(uuid);
             activeShinyEntities.remove(entity);
+            nonShinyDittoEntities.remove(uuid);
         });
 
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
@@ -303,7 +309,6 @@ public class TropiTrackerClient implements ClientModInitializer {
     /**
      * Déclenche l'alerte shiny pour un Pokémon de dresseur envoyé en combat,
      * uniquement lorsque le joueur regarde ce combat (écran de combat ouvert).
-     * Pas de faisceau ni de boucle sonore — uniquement le titre plein écran + son ponctuel.
      */
     private static void handleBattleShiny(PokemonEntity pe) {
         MinecraftClient client = MinecraftClient.getInstance();
@@ -348,11 +353,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
-    /**
-     * Appelé par BoardDetector quand le tableau de chasse est lu.
-     * Remplace entièrement la liste des pokémon trackés depuis le tableau
-     * (les pokémon trackés manuellement via /track ne sont pas affectés).
-     */
     public static void setBoardTargets(Set<String> speciesNames) {
         Set<String> newSet = new HashSet<>();
         for (String speciesName : speciesNames) {
@@ -374,10 +374,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         System.out.println("[TropiTracker] Tableau de chasse : " + speciesNames.size() + " pokémon trackés automatiquement.");
     }
 
-    /**
-     * Retire un pokémon du tracking automatique (appelé par CatchDetector une fois la capture confirmée).
-     * Ne touche pas aux pokémon trackés manuellement via /track.
-     */
     public static void removeBoardTarget(String speciesName) {
         String lower = speciesName.toLowerCase();
         if (!boardSpeciesCanonical.remove(lower)) return;
@@ -391,9 +387,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         System.out.println("[TropiTracker] Capture confirmée, retiré du tracking automatique : " + lower);
 
         MinecraftClient client = MinecraftClient.getInstance();
-        // client.execute() diffère l'envoi au prochain tick : on ne doit JAMAIS ajouter
-        // un message au chat pendant le traitement d'un message entrant, sous peine de
-        // ConcurrentModificationException -> déconnexion du serveur
         client.execute(() -> {
             if (client.player != null) {
                 client.player.sendMessage(
@@ -412,7 +405,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         return boardSpeciesCanonical.size();
     }
 
-    /** Retourne le nom de l'espèce si une seule cible reste trackée depuis le tableau, sinon null. */
     public static String getBoardTrackedSpeciesIfUnique() {
         if (boardSpeciesCanonical.size() == 1) {
             return boardSpeciesCanonical.iterator().next();
@@ -425,12 +417,6 @@ public class TropiTrackerClient implements ClientModInitializer {
             || boardTrackedPokemons.contains(frLower) || boardTrackedPokemons.contains(speciesName);
     }
 
-    /**
-     * Rescanne tous les Pokémon déjà présents dans le monde après une mise à jour du tableau de chasse.
-     * Sans ça, un Pokémon déjà chargé AVANT que le tableau ne soit lu ne déclencherait jamais
-     * l'alerte (ENTITY_LOAD ne se reproduit pas), même s'il devient une cible trackée :
-     * seul le son de la boucle périodique se déclencherait, sans le message associé.
-     */
     public static void recheckAfterBoardUpdate() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null) return;
@@ -438,6 +424,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         for (Entity e : client.world.getEntities()) {
             if (!(e instanceof PokemonEntity pe)) continue;
             if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+            if (nonShinyDittoEntities.contains(pe.getUuid())) continue;
             if (pe.getBattleId() != null) continue;
             if (announcedEntities.contains(pe.getUuid())) continue;
             if (!isTrackedMatch(pe.getPokemon())) continue;
@@ -449,10 +436,9 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static void handleSpawn(PokemonEntity pe) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
-
-        // Garde anti-doublon : un pokémon déjà annoncé (par n'importe quel chemin :
-        // file d'attente ENTITY_LOAD ou scan périodique) ne doit jamais l'être une 2e fois
         if (announcedEntities.contains(pe.getUuid())) return;
+        // Ne jamais alerter pour un Métamorph non-shiny (potentiellement transformé en shiny)
+        if (nonShinyDittoEntities.contains(pe.getUuid())) return;
 
         Pokemon pokemon = pe.getPokemon();
         System.out.println("[DEBUG_SHINY] handleSpawn appelé pour : " + pokemon.getSpecies().getName()
@@ -472,13 +458,9 @@ public class TropiTrackerClient implements ClientModInitializer {
             return;
         }
 
-        // Marqué comme signalé avant tout traitement, pour que le scan périodique
-        // ne ré-annonce pas la même entité juste après
         announcedEntities.add(pe.getUuid());
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-
-        // Traduction automatique via le système officiel du jeu
         String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
@@ -513,10 +495,9 @@ public class TropiTrackerClient implements ClientModInitializer {
 
             client.execute(() -> {
                 if (bigAlert) {
-                    // Alerte plein écran pour les shiny (équivalent de la commande /title)
                     client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
-                    client.inGameHud.setTitleTicks(5, 70, 20); // fade-in, maintien, fade-out
+                    client.inGameHud.setTitleTicks(5, 70, 20);
                     client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
                 } else {
                     float volume = trackedAlert ? TRACKED_VOLUME : 1.0f;
@@ -531,8 +512,6 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     private static SoundEvent getSpecialSound(Pokemon pokemon) {
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-
-        // Traduction automatique pour garder la cohérence du scanner
         String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
