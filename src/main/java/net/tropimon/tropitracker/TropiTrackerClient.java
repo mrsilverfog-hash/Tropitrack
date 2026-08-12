@@ -15,12 +15,22 @@ import net.minecraft.sound.SoundEvent;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import org.lwjgl.glfw.GLFW;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
 
 public class TropiTrackerClient implements ClientModInitializer {
+
+    /**
+     * Logger partagé du mod. Le nom "tropitracker" apparaît déjà dans chaque
+     * ligne de log de Minecraft, d'où l'absence de préfixe [TropiTracker] dans
+     * les messages : il serait dupliqué. Les traces peuvent désormais être
+     * filtrées par niveau, ce que la sortie standard ne permettait pas.
+     */
+    public static final Logger LOGGER = LoggerFactory.getLogger("tropitracker");
 
     private static KeyBinding muteKey;
     private static boolean muted = false;
@@ -303,7 +313,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             boardSpeciesCanonical.add(speciesName.toLowerCase());
         }
 
-        System.out.println("[TropiTracker] Tableau de chasse : " + speciesNames.size() + " pokémon trackés automatiquement.");
+        LOGGER.info("Tableau de chasse : {} pokémon trackés automatiquement.", speciesNames.size());
     }
 
     public static void removeBoardTarget(String speciesName) {
@@ -316,7 +326,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             boardTrackedPokemons.remove(frenchName.toLowerCase());
         }
 
-        System.out.println("[TropiTracker] Capture confirmée, retiré du tracking automatique : " + lower);
+        LOGGER.info("Capture confirmée, retiré du tracking automatique : {}", lower);
 
         MinecraftClient client = MinecraftClient.getInstance();
         client.execute(() -> {

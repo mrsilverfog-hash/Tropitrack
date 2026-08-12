@@ -56,7 +56,7 @@ public class CatchDetector {
                     if (speciesName != null) {
                         onCatchDetected(speciesName);
                     } else {
-                        System.out.println("[TropiTracker][Catch] Pokémon '" + pokemonName + "' détecté envoyé au PC, mais espèce non résolue.");
+                        TropiTrackerClient.LOGGER.warn("[Catch] Pokémon '{}' détecté envoyé au PC, mais espèce non résolue.", pokemonName);
                     }
                     return;
                 }
@@ -67,12 +67,12 @@ public class CatchDetector {
             } catch (Exception e) {
                 // Ne JAMAIS laisser une exception remonter dans la pile réseau :
                 // ça provoquerait une déconnexion du serveur ("Internal Exception")
-                System.out.println("[TropiTracker][Catch] Erreur interceptée : " + e);
-                e.printStackTrace();
+                // Le logger imprime deja la stack trace complete
+                TropiTrackerClient.LOGGER.warn("[Catch] Erreur interceptée", e);
             }
         });
 
-        System.out.println("[TropiTracker] CatchDetector enregistré (basé uniquement sur les messages de chat)");
+        TropiTrackerClient.LOGGER.info("CatchDetector enregistré (basé uniquement sur les messages de chat)");
     }
 
     /**
@@ -93,7 +93,7 @@ public class CatchDetector {
 
         pendingCatchSpecies = speciesName;
         pendingCatchTime = now;
-        System.out.println("[TropiTracker][Catch] Capture en attente : " + speciesName + " (attente du message de chasse complétée)");
+        TropiTrackerClient.LOGGER.info("[Catch] Capture en attente : {} (attente du message de chasse complétée)", speciesName);
     }
 
     /**
@@ -122,7 +122,7 @@ public class CatchDetector {
         }
 
         pendingCompletionTime = now;
-        System.out.println("[TropiTracker][Catch] Chasse complétée vue, en attente du message PC pour identifier le pokémon");
+        TropiTrackerClient.LOGGER.info("[Catch] Chasse complétée vue, en attente du message PC pour identifier le pokémon");
     }
 
     /** Les deux signaux sont confirmés : on retire effectivement la cible du tracking. */

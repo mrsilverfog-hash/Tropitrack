@@ -47,7 +47,7 @@ public class BoardDetector {
         try {
             List<?> widgets = screen.children();
             if (widgets == null) {
-                System.out.println("[TropiTracker][Board] Impossible de lire les widgets du tableau.");
+                TropiTrackerClient.LOGGER.warn("[Board] Impossible de lire les widgets du tableau.");
                 return;
             }
 
@@ -78,7 +78,7 @@ public class BoardDetector {
             }
 
         } catch (Exception e) {
-            System.out.println("[TropiTracker][Board] Erreur lecture tableau : " + e.getMessage());
+            TropiTrackerClient.LOGGER.warn("[Board] Erreur lecture tableau", e);
         }
     }
 
