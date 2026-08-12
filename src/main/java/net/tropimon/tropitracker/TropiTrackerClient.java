@@ -370,20 +370,13 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (announcedEntities.contains(pe.getUuid())) return;
 
         Pokemon pokemon = pe.getPokemon();
-        System.out.println("[DEBUG_SHINY] handleSpawn appelé pour : " + pokemon.getSpecies().getName()
-            + " | shiny=" + pokemon.getShiny()
-            + " | ownerEntity=" + pe.getOwnerUuid()
-            + " | ownerPokemon=" + pokemon.getOwnerUUID());
 
         if (pe.getOwnerUuid() != null || pokemon.getOwnerUUID() != null) {
-            System.out.println("[DEBUG_SHINY] Stoppé : Pokémon possédé");
             return;
         }
 
         SoundEvent sound = getSpecialSound(pokemon);
-        System.out.println("[DEBUG_SHINY] enableShiny=" + enableShiny + " | sound=" + sound);
         if (sound == null) {
-            System.out.println("[DEBUG_SHINY] Stoppé : sound est null");
             return;
         }
 
@@ -420,7 +413,6 @@ public class TropiTrackerClient implements ClientModInitializer {
             boolean trackedAlert = isTrackedMatch(pokemon);
             String finalDisplayName = frenchName;
             String finalMessage = message;
-            System.out.println("[DEBUG_SHINY] Envoi alerte : bigAlert=" + bigAlert + " | trackedAlert=" + trackedAlert + " | message=" + finalMessage);
 
             client.execute(() -> {
                 if (bigAlert) {
@@ -434,8 +426,6 @@ public class TropiTrackerClient implements ClientModInitializer {
                     client.player.playSound(finalSound, volume, 1.0f);
                 }
             });
-        } else {
-            System.out.println("[DEBUG_SHINY] Alerte bloquée : message vide=" + message.isEmpty() + " | muted=" + muted);
         }
     }
 
