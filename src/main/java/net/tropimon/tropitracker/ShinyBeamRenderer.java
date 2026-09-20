@@ -19,15 +19,15 @@ public class ShinyBeamRenderer {
     private static final float SHINY_G = 0.85f;
     private static final float SHINY_B = 0.1f;
 
-    // Couleur violette du faisceau baron
-    private static final float BARON_R = 0.70f;
-    private static final float BARON_G = 0.30f;
-    private static final float BARON_B = 1.0f;
+    // Couleur rouge du faisceau baron
+    private static final float BARON_R = 1.0f;
+    private static final float BARON_G = 0.15f;
+    private static final float BARON_B = 0.15f;
 
     private static final float ALPHA = 1.0f;
 
     private static final int SHINY_TEXT_COLOR = 0xFFD700;
-    private static final int BARON_TEXT_COLOR = 0xB45CFF;
+    private static final int BARON_TEXT_COLOR = 0xFF3030;
 
     public static void render(WorldRenderContext context) {
         MinecraftClient client = MinecraftClient.getInstance();

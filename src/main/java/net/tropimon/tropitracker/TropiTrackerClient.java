@@ -92,7 +92,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static boolean loopActive = false;
 
     private static final float SHINY_VOLUME = 3.0f;
-    private static final float BARON_VOLUME = 2.5f;
+    private static final float BARON_VOLUME = 1.25f;
     private static final float TRACKED_VOLUME = 2.0f;
 
     private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
@@ -583,7 +583,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             client.player.sendMessage(Text.literal("§a" + hits.size() + " piste(s) :"), false);
             int shown = 0;
             for (String h : hits) {
-                client.player.sendMessage(Text.literal("§5👑 §f" + h), false);
+                client.player.sendMessage(Text.literal("§c👑 §f" + h), false);
                 if (++shown >= 10) break;
             }
         } else {
@@ -757,7 +757,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         String message = "";
 
         // Mention ajoutée aux alertes plus prioritaires, pour ne pas perdre l'info
-        String baronSuffix = baron ? " §5👑 BARON" : "";
+        String baronSuffix = baron ? " §c👑 BARON" : "";
 
         String frLower = frenchName.toLowerCase();
         if (isTracked(frLower, speciesName)) {
@@ -765,7 +765,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         } else if (isShiny && enableShiny) {
             message = "§6✨ Pokémon Shiny sauvage apparu : §e" + frenchName + " §6✨" + baronSuffix;
         } else if (baron) {
-            message = "§5👑 Baron sauvage apparu : §f" + getDisplayLabel(pe) + " §5👑";
+            message = "§c👑 Baron sauvage apparu : §f" + getDisplayLabel(pe) + " §c👑";
         } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
             message = "§c⚡ Légendaire sauvage apparu : §f" + frenchName + " §c⚡";
         } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
@@ -792,8 +792,8 @@ public class TropiTrackerClient implements ClientModInitializer {
                     client.inGameHud.setTitleTicks(5, 70, 20);
                     client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
                 } else if (baronAlert) {
-                    client.inGameHud.setTitle(Text.literal("§5👑 BARON 👑"));
-                    client.inGameHud.setSubtitle(Text.literal("§d" + finalBaronLabel));
+                    client.inGameHud.setTitle(Text.literal("§c👑 BARON 👑"));
+                    client.inGameHud.setSubtitle(Text.literal("§c" + finalBaronLabel));
                     client.inGameHud.setTitleTicks(5, 70, 20);
                     client.player.sendMessage(Text.literal(finalMessage), false);
                     client.player.playSound(finalSound, BARON_VOLUME, 1.0f);
