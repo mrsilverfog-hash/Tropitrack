@@ -457,139 +457,182 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     /**
-     * Diagnostic : cherche la chaîne « baron » partout où elle peut se cacher,
-     * puisqu'elle n'est ni dans customName, ni dans displayName, ni dans le
-     * nickname. Trois pistes explorées : les autres entités du monde (une
-     * entité d'affichage séparée porterait le libellé), le DataTracker de
-     * l'entité Pokémon (le serveur peut y synchroniser un champ custom), et
-     * tous les accesseurs publics de l'objet Pokemon de Cobblemon.
+     * Diagnostic. Le libellé n'est ni dans customName, ni dans displayName, ni
+     * dans le nickname : on ratisse donc beaucoup plus large. Trois angles morts
+     * de la version précédente sont corrigés ici — le DataTracker est lu sur
+     * TOUTES les entités (une entité d'affichage porte son texte là, pas dans
+     * son nom), plus aucun plafond sur le nombre de Pokémon inspectés, et la
+     * recherche porte aussi sur « ancien ».
      */
+    private static final String[] BARON_HINTS = { "baron", "ancien" };
+
     private static void dumpNearbyNames() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null || client.player == null) return;
 
         java.util.List<String> hits = new java.util.ArrayList<>();
-        Vec3dHolder self = new Vec3dHolder(client.player.getX(), client.player.getY(), client.player.getZ());
+        double px = client.player.getX(), py = client.player.getY(), pz = client.player.getZ();
 
-        // --- Piste 1 : toutes les entités du monde, tous types confondus ---
-        int scanned = 0;
+        java.util.List<Entity> near = new java.util.ArrayList<>();
+        java.util.Map<String, Integer> typeCount = new java.util.TreeMap<>();
+
         for (Entity e : client.world.getEntities()) {
-            double dx = e.getX() - self.x, dy = e.getY() - self.y, dz = e.getZ() - self.z;
-            if (dx * dx + dy * dy + dz * dz > 48 * 48) continue;
-            scanned++;
-
-            String type = e.getType().toString();
-            check(hits, "entite[" + type + "].customName", e.getCustomName());
-            check(hits, "entite[" + type + "].displayName", e.getDisplayName());
-            check(hits, "entite[" + type + "].name", e.getName());
-        }
-        LOGGER.info("BARONDEBUG {} entites scannees dans un rayon de 48 blocs.", scanned);
-
-        // --- Pistes 2 et 3 : sur les 3 Pokémon sauvages les plus proches ---
-        int inspected = 0;
-        for (Entity e : client.world.getEntities()) {
-            if (!(e instanceof PokemonEntity pe)) continue;
-            if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
-            double dx = pe.getX() - self.x, dy = pe.getY() - self.y, dz = pe.getZ() - self.z;
-            if (dx * dx + dy * dy + dz * dz > 48 * 48) continue;
-
-            String tag = pe.getPokemon().getSpecies().getName();
-
-            // DataTracker : champs synchronisés par le serveur.
-            // Tout passe par la réflexion : les noms de méthodes sont remappés
-            // à l'exécution, donc on invoque tous les accesseurs sans argument
-            // et on inspecte ce qui en sort, quel que soit leur nom.
-            try {
-                Object dt = pe.getDataTracker();
-                for (java.lang.reflect.Method m : dt.getClass().getMethods()) {
-                    if (m.getParameterCount() != 0) continue;
-                    if (m.getName().equals("getClass")) continue;
-                    try {
-                        Object v = m.invoke(dt);
-                        if (v == null) continue;
-                        if (v instanceof Iterable<?> it) {
-                            for (Object o : it) {
-                                check(hits, "datatracker[" + tag + "]", String.valueOf(o));
-                            }
-                        } else {
-                            check(hits, "datatracker[" + tag + "]", String.valueOf(v));
-                        }
-                    } catch (Throwable ignored) {
-                    }
-                }
-            } catch (Throwable t) {
-                LOGGER.info("BARONDEBUG datatracker illisible : {}", String.valueOf(t));
-            }
-
-            // Tous les accesseurs publics sans argument de l'objet Pokemon
-            Object pokemon = pe.getPokemon();
-            java.util.List<String> getterNames = new java.util.ArrayList<>();
-            for (java.lang.reflect.Method m : pokemon.getClass().getMethods()) {
-                if (m.getParameterCount() != 0) continue;
-                String n = m.getName();
-                if (!n.startsWith("get") && !n.startsWith("is")) continue;
-                if (n.equals("getClass")) continue;
-                getterNames.add(n);
-                try {
-                    Object v = m.invoke(pokemon);
-                    if (v == null) continue;
-                    String str = (v instanceof Text t2) ? t2.getString() : String.valueOf(v);
-                    check(hits, "Pokemon." + n + "[" + tag + "]", str);
-                } catch (Throwable ignored) {
-                }
-            }
-
-            // Idem sur l'entité elle-même
-            for (java.lang.reflect.Method m : pe.getClass().getMethods()) {
-                if (m.getParameterCount() != 0) continue;
-                String n = m.getName();
-                if (!n.startsWith("get") && !n.startsWith("is")) continue;
-                if (n.equals("getClass")) continue;
-                try {
-                    Object v = m.invoke(pe);
-                    if (v == null) continue;
-                    String str = (v instanceof Text t2) ? t2.getString() : String.valueOf(v);
-                    if (str.length() > 400) continue;
-                    check(hits, "PokemonEntity." + n + "[" + tag + "]", str);
-                } catch (Throwable ignored) {
-                }
-            }
-
-            if (inspected == 0) {
-                java.util.Collections.sort(getterNames);
-                LOGGER.info("BARONDEBUG accesseurs Pokemon disponibles : {}", String.join(", ", getterNames));
-            }
-
-            inspected++;
-            if (inspected >= 3) break;
+            double dx = e.getX() - px, dy = e.getY() - py, dz = e.getZ() - pz;
+            if (dx * dx + dy * dy + dz * dz > 64 * 64) continue;
+            near.add(e);
+            typeCount.merge(String.valueOf(e.getType()), 1, Integer::sum);
         }
 
-        // --- Restitution ---
+        LOGGER.info("BARONDEBUG {} entites dans 64 blocs, par type : {}", near.size(), typeCount);
+
+        PokemonEntity closest = null;
+        double closestDist = Double.MAX_VALUE;
+        int pokemonCount = 0;
+        java.util.List<String> speciesSeen = new java.util.ArrayList<>();
+
+        for (Entity e : near) {
+            String type = String.valueOf(e.getType());
+
+            check(hits, type + ".customName", e.getCustomName());
+            check(hits, type + ".displayName", e.getDisplayName());
+            check(hits, type + ".name", e.getName());
+
+            // DataTracker de TOUTE entité : c'est là que vit le texte d'un display
+            scanTracker(hits, type + ".datatracker", e);
+
+            if (e instanceof PokemonEntity pe) {
+                pokemonCount++;
+                speciesSeen.add(pe.getPokemon().getSpecies().getName());
+
+                String tag = pe.getPokemon().getSpecies().getName();
+                scanObject(hits, "Pokemon[" + tag + "]", pe.getPokemon());
+                scanObject(hits, "PokemonEntity[" + tag + "]", pe);
+
+                double dx = pe.getX() - px, dy = pe.getY() - py, dz = pe.getZ() - pz;
+                double d = dx * dx + dy * dy + dz * dz;
+                if (d < closestDist) { closestDist = d; closest = pe; }
+            }
+        }
+
+        LOGGER.info("BARONDEBUG {} Pokemon inspectes : {}", pokemonCount, speciesSeen);
+
         for (String h : hits) {
             LOGGER.info("BARONDEBUG TROUVE >>> {}", h);
         }
 
-        if (hits.isEmpty()) {
-            client.player.sendMessage(Text.literal(
-                "§c« baron » introuvable côté client (§f" + scanned + "§c entités, §f" + inspected
-                + "§c Pokémon inspectés). Le libellé vient probablement d'un paquet non exposé."), false);
-        } else {
-            client.player.sendMessage(Text.literal("§a" + hits.size() + " piste(s) trouvée(s) :"), false);
+        if (!hits.isEmpty()) {
+            client.player.sendMessage(Text.literal("§a" + hits.size() + " piste(s) :"), false);
             int shown = 0;
             for (String h : hits) {
                 client.player.sendMessage(Text.literal("§5👑 §f" + h), false);
                 if (++shown >= 10) break;
             }
+        } else {
+            client.player.sendMessage(Text.literal(
+                "§cRien trouvé (§f" + near.size() + "§c entités, §f" + pokemonCount + "§c Pokémon : §f"
+                + String.join(", ", speciesSeen) + "§c)."), false);
+
+            // Vidage intégral du Pokémon le plus proche vers les logs, pour
+            // identifier le champ porteur même sans correspondance textuelle.
+            if (closest != null) {
+                LOGGER.info("BARONDEBUG === VIDAGE COMPLET de {} ===",
+                    closest.getPokemon().getSpecies().getName());
+                scanObject(hits, "DUMP.Pokemon", closest.getPokemon(), true);
+                scanObject(hits, "DUMP.PokemonEntity", closest);
+                scanTracker(hits, "DUMP.datatracker", closest, true);
+                client.player.sendMessage(Text.literal(
+                    "§7Vidage complet de §f" + closest.getPokemon().getSpecies().getName()
+                    + " §7écrit dans les logs."), false);
+            }
         }
-        client.player.sendMessage(Text.literal("§7Détail complet dans les logs (filtre : BARONDEBUG)."), false);
+        client.player.sendMessage(Text.literal("§7Logs : filtre BARONDEBUG."), false);
     }
 
-    /** Retient la source si sa valeur contient « baron ». */
+    private static void scanObject(java.util.List<String> hits, String prefix, Object target) {
+        scanObject(hits, prefix, target, false);
+    }
+
+    /**
+     * Invoque tous les accesseurs publics sans argument de l'objet et examine
+     * le résultat. logAll force l'écriture de chaque valeur dans les logs, même
+     * sans correspondance : utile quand on ignore encore quel champ chercher.
+     */
+    private static void scanObject(java.util.List<String> hits, String prefix, Object target, boolean logAll) {
+        if (target == null) return;
+        for (java.lang.reflect.Method m : target.getClass().getMethods()) {
+            if (m.getParameterCount() != 0) continue;
+            String n = m.getName();
+            if (n.equals("getClass") || n.equals("hashCode") || n.equals("notify") || n.equals("notifyAll")) continue;
+            if (!n.startsWith("get") && !n.startsWith("is") && !n.equals("toString")) continue;
+            try {
+                Object v = m.invoke(target);
+                if (v == null) continue;
+                String str = stringify(v);
+                if (str.isEmpty()) continue;
+                if (logAll) LOGGER.info("BARONDEBUG   {}.{} = {}", prefix, n,
+                    str.length() > 300 ? str.substring(0, 300) + "…" : str);
+                check(hits, prefix + "." + n, str);
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private static void scanTracker(java.util.List<String> hits, String prefix, Entity e) {
+        scanTracker(hits, prefix, e, false);
+    }
+
+    /**
+     * Les noms de méthodes du DataTracker sont remappés à l'exécution, donc on
+     * invoque tout ce qui ne prend pas d'argument et on inspecte le contenu.
+     */
+    private static void scanTracker(java.util.List<String> hits, String prefix, Entity e, boolean logAll) {
+        try {
+            Object dt = e.getDataTracker();
+            if (dt == null) return;
+            for (java.lang.reflect.Method m : dt.getClass().getMethods()) {
+                if (m.getParameterCount() != 0) continue;
+                if (m.getName().equals("getClass")) continue;
+                try {
+                    Object v = m.invoke(dt);
+                    if (v == null) continue;
+                    if (v instanceof Iterable<?> it) {
+                        for (Object o : it) {
+                            String str = stringify(o);
+                            if (logAll) LOGGER.info("BARONDEBUG   {} = {}", prefix, str);
+                            check(hits, prefix, str);
+                        }
+                    } else {
+                        String str = stringify(v);
+                        if (logAll) LOGGER.info("BARONDEBUG   {} = {}", prefix, str);
+                        check(hits, prefix, str);
+                    }
+                } catch (Throwable ignored) {
+                }
+            }
+        } catch (Throwable t) {
+            LOGGER.info("BARONDEBUG datatracker illisible sur {} : {}", prefix, String.valueOf(t));
+        }
+    }
+
+    private static String stringify(Object v) {
+        if (v == null) return "";
+        if (v instanceof Text text) return text.getString();
+        if (v instanceof java.util.Optional<?> opt) return opt.isPresent() ? stringify(opt.get()) : "";
+        String s = String.valueOf(v);
+        return s.length() > 2000 ? s.substring(0, 2000) : s;
+    }
+
+    /** Retient la source si sa valeur contient un des indices recherchés. */
     private static void check(java.util.List<String> hits, String source, Object value) {
         if (value == null) return;
-        String str = (value instanceof Text text) ? text.getString() : String.valueOf(value);
+        String str = stringify(value);
         if (str.isEmpty()) return;
-        if (!flatten(str).contains(BARON_PATTERN)) return;
+        String flat = flatten(str);
+        boolean match = false;
+        for (String hint : BARON_HINTS) {
+            if (flat.contains(hint)) { match = true; break; }
+        }
+        if (!match) return;
         String clean = str.replaceAll("§.", "").trim();
         if (clean.length() > 200) clean = clean.substring(0, 200) + "…";
         String line = source + " = \"" + clean + "\"";
@@ -617,12 +660,6 @@ public class TropiTrackerClient implements ClientModInitializer {
             .normalize(stripped, java.text.Normalizer.Form.NFD)
             .replaceAll("\\p{M}", "");
         return noAccents.toLowerCase(java.util.Locale.ROOT);
-    }
-
-    /** Petit porteur de coordonnées, pour éviter une dépendance de plus. */
-    private static class Vec3dHolder {
-        final double x, y, z;
-        Vec3dHolder(double x, double y, double z) { this.x = x; this.y = y; this.z = z; }
     }
 
     // ------------------------------------------------------------------
