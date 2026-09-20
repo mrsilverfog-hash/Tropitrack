@@ -437,24 +437,14 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     /**
-     * Remplace l'ancien filtre « possédé = ignoré ». Les Barons de Tropimon
-     * portent un propriétaire, ce qui les faisait écarter avant même la
-     * détection. Restent exclus : les Pokémon du joueur, et ceux d'un dresseur
-     * qui ne sont pas Barons.
+     * Seuls les Pokémon sauvages sont alertés. Les Barons en font partie : ils
+     * sont sauvages et capturables, d'où le maintien du filtre strict — un
+     * Baron déjà capturé par un autre joueur ne doit pas déclencher l'alerte.
      */
     private static boolean isAlertable(PokemonEntity pe) {
         if (pe == null) return false;
-
-        java.util.UUID owner = pe.getOwnerUuid() != null
-            ? pe.getOwnerUuid()
-            : pe.getPokemon().getOwnerUUID();
-
-        if (owner == null) return true;
-
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player != null && owner.equals(client.player.getUuid())) return false;
-
-        return isBaron(pe);
+        if (pe.getOwnerUuid() != null) return false;
+        return pe.getPokemon().getOwnerUUID() == null;
     }
 
     /**
