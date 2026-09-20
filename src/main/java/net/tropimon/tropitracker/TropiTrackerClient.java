@@ -183,8 +183,8 @@ public class TropiTrackerClient implements ClientModInitializer {
                     TrackedPending pending = entry.getValue();
                     PokemonEntity pe = pending.entity;
 
-                    // Pokémon d'un dresseur : jamais alerté, quelle que soit la situation
-                    if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) {
+                    // Pokémon du joueur, ou d'un dresseur et non Baron : jamais alerté
+                    if (!isAlertable(pe)) {
                         toRemove.add(uuid);
                         seenEntities.add(uuid);
                         continue;
@@ -220,7 +220,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
                 for (Entity e : client.world.getEntities()) {
                     if (!(e instanceof PokemonEntity pe)) continue;
-                    if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+                    if (!isAlertable(pe)) continue;
                     if (pe.getBattleId() != null) continue; // ignoré si en combat
 
                     if (enableShiny && pe.getPokemon().getShiny()) {
@@ -400,7 +400,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         for (Entity e : client.world.getEntities()) {
             if (!(e instanceof PokemonEntity pe)) continue;
-            if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+            if (!isAlertable(pe)) continue;
             if (pe.getBattleId() != null) continue;
             if (announcedEntities.contains(pe.getUuid())) continue;
             if (!isTrackedMatch(pe.getPokemon())) continue;
@@ -434,6 +434,27 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (nameMatchesBaron(pe.getDisplayName())) return true;
         String nick = nicknameOf(pe.getPokemon());
         return nick != null && flatten(nick).contains(BARON_PATTERN);
+    }
+
+    /**
+     * Remplace l'ancien filtre « possédé = ignoré ». Les Barons de Tropimon
+     * portent un propriétaire, ce qui les faisait écarter avant même la
+     * détection. Restent exclus : les Pokémon du joueur, et ceux d'un dresseur
+     * qui ne sont pas Barons.
+     */
+    private static boolean isAlertable(PokemonEntity pe) {
+        if (pe == null) return false;
+
+        java.util.UUID owner = pe.getOwnerUuid() != null
+            ? pe.getOwnerUuid()
+            : pe.getPokemon().getOwnerUUID();
+
+        if (owner == null) return true;
+
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player != null && owner.equals(client.player.getUuid())) return false;
+
+        return isBaron(pe);
     }
 
     /**
@@ -542,6 +563,15 @@ public class TropiTrackerClient implements ClientModInitializer {
             if (e instanceof PokemonEntity pe) {
                 pokemonCount++;
                 speciesSeen.add(pe.getPokemon().getSpecies().getName());
+
+                java.util.UUID owner = pe.getOwnerUuid() != null
+                    ? pe.getOwnerUuid() : pe.getPokemon().getOwnerUUID();
+                LOGGER.info("BARONDEBUG {} | titled='{}' | owner={} | battle={} | isBaron={} | alertable={}",
+                    pe.getPokemon().getSpecies().getName(),
+                    String.valueOf(titledNameOf(pe)),
+                    String.valueOf(owner),
+                    String.valueOf(pe.getBattleId()),
+                    isBaron(pe), isAlertable(pe));
 
                 String tag = pe.getPokemon().getSpecies().getName();
                 scanObject(hits, "Pokemon[" + tag + "]", pe.getPokemon());
@@ -714,7 +744,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         Pokemon pokemon = pe.getPokemon();
 
-        if (pe.getOwnerUuid() != null || pokemon.getOwnerUUID() != null) {
+        if (!isAlertable(pe)) {
             return;
         }
 
