@@ -596,6 +596,29 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!hits.contains(line)) hits.add(line);
     }
 
+    private static boolean nameMatchesBaron(Text text) {
+        if (text == null) return false;
+        String raw = text.getString();
+        if (raw == null || raw.isEmpty()) return false;
+        return flatten(raw).contains(BARON_PATTERN);
+    }
+
+    /** Nom lisible du Pokémon, codes couleur retirés, pour l'affichage. */
+    public static String getDisplayLabel(PokemonEntity pe) {
+        Text name = pe.getCustomName() != null ? pe.getCustomName() : pe.getDisplayName();
+        if (name == null) return "?";
+        return name.getString().replaceAll("§.", "").trim();
+    }
+
+    /** Minuscules, sans accents ni codes couleur Minecraft. */
+    private static String flatten(String s) {
+        String stripped = s.replaceAll("§.", "");
+        String noAccents = java.text.Normalizer
+            .normalize(stripped, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "");
+        return noAccents.toLowerCase(java.util.Locale.ROOT);
+    }
+
     /** Petit porteur de coordonnées, pour éviter une dépendance de plus. */
     private static class Vec3dHolder {
         final double x, y, z;
