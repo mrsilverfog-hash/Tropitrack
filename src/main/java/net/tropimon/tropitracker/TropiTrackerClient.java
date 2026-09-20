@@ -421,10 +421,49 @@ public class TropiTrackerClient implements ClientModInitializer {
      */
     public static boolean isBaron(PokemonEntity pe) {
         if (!enableBaron || pe == null) return false;
+
+        // Source réelle du libellé sur Tropimon : le « titled name » de
+        // Cobblemon, qui porte « Rattata l'Ancien Baron » là où customName,
+        // displayName et le nickname ne contiennent que l'espèce.
+        String titled = titledNameOf(pe);
+        if (titled != null && flatten(titled).contains(BARON_PATTERN)) return true;
+
+        // Les trois autres sources restent testées : elles ne coûtent rien et
+        // couvrent le cas où le serveur changerait de méthode de nommage.
         if (nameMatchesBaron(pe.getCustomName())) return true;
         if (nameMatchesBaron(pe.getDisplayName())) return true;
         String nick = nicknameOf(pe.getPokemon());
         return nick != null && flatten(nick).contains(BARON_PATTERN);
+    }
+
+    /**
+     * Lu par réflexion plutôt qu'en appel direct : getTitledName() appartient à
+     * Cobblemon, pas à Minecraft, et une évolution du mod ne doit pas empêcher
+     * TropiTracker de démarrer. La méthode est résolue une seule fois.
+     */
+    private static java.lang.reflect.Method titledNameMethod = null;
+    private static boolean titledNameResolved = false;
+
+    public static String titledNameOf(PokemonEntity pe) {
+        if (pe == null) return null;
+        if (!titledNameResolved) {
+            titledNameResolved = true;
+            try {
+                titledNameMethod = pe.getClass().getMethod("getTitledName");
+                LOGGER.info("getTitledName() disponible : détection baron active.");
+            } catch (Throwable t) {
+                LOGGER.info("getTitledName() indisponible, repli sur les noms d'entité.");
+                titledNameMethod = null;
+            }
+        }
+        if (titledNameMethod == null) return null;
+        try {
+            Object v = titledNameMethod.invoke(pe);
+            if (v instanceof Text text) return text.getString();
+            if (v != null) return String.valueOf(v);
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     /**
@@ -648,6 +687,10 @@ public class TropiTrackerClient implements ClientModInitializer {
 
     /** Nom lisible du Pokémon, codes couleur retirés, pour l'affichage. */
     public static String getDisplayLabel(PokemonEntity pe) {
+        String titled = titledNameOf(pe);
+        if (titled != null && !titled.isEmpty()) {
+            return titled.replaceAll("§.", "").trim();
+        }
         Text name = pe.getCustomName() != null ? pe.getCustomName() : pe.getDisplayName();
         if (name == null) return "?";
         return name.getString().replaceAll("§.", "").trim();
