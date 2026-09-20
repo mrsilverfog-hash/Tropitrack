@@ -495,12 +495,26 @@ public class TropiTrackerClient implements ClientModInitializer {
 
             String tag = pe.getPokemon().getSpecies().getName();
 
-            // DataTracker : champs synchronisés par le serveur
+            // DataTracker : champs synchronisés par le serveur.
+            // Tout passe par la réflexion : les noms de méthodes sont remappés
+            // à l'exécution, donc on invoque tous les accesseurs sans argument
+            // et on inspecte ce qui en sort, quel que soit leur nom.
             try {
-                java.util.List<?> entries = pe.getDataTracker().getChangedEntries();
-                if (entries != null) {
-                    for (Object entry : entries) {
-                        check(hits, "datatracker[" + tag + "]", String.valueOf(entry));
+                Object dt = pe.getDataTracker();
+                for (java.lang.reflect.Method m : dt.getClass().getMethods()) {
+                    if (m.getParameterCount() != 0) continue;
+                    if (m.getName().equals("getClass")) continue;
+                    try {
+                        Object v = m.invoke(dt);
+                        if (v == null) continue;
+                        if (v instanceof Iterable<?> it) {
+                            for (Object o : it) {
+                                check(hits, "datatracker[" + tag + "]", String.valueOf(o));
+                            }
+                        } else {
+                            check(hits, "datatracker[" + tag + "]", String.valueOf(v));
+                        }
+                    } catch (Throwable ignored) {
                     }
                 }
             } catch (Throwable t) {
