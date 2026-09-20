@@ -14,18 +14,28 @@ import java.util.Set;
 
 public class ShinyBeamRenderer {
 
-    // Couleur dorée du faisceau (R, G, B, A de 0.0 à 1.0)
-    private static final float R = 1.0f;
-    private static final float G = 0.85f;
-    private static final float B = 0.1f;
-    private static final float A = 1.0f;
+    // Couleur dorée du faisceau shiny (R, G, B, A de 0.0 à 1.0)
+    private static final float SHINY_R = 1.0f;
+    private static final float SHINY_G = 0.85f;
+    private static final float SHINY_B = 0.1f;
+
+    // Couleur violette du faisceau baron
+    private static final float BARON_R = 0.70f;
+    private static final float BARON_G = 0.30f;
+    private static final float BARON_B = 1.0f;
+
+    private static final float ALPHA = 1.0f;
+
+    private static final int SHINY_TEXT_COLOR = 0xFFD700;
+    private static final int BARON_TEXT_COLOR = 0xB45CFF;
 
     public static void render(WorldRenderContext context) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null || client.player == null) return;
 
         Set<PokemonEntity> shinies = TropiTrackerClient.getActiveShinyEntities();
-        if (shinies.isEmpty()) return;
+        Set<PokemonEntity> barons  = TropiTrackerClient.getActiveBaronEntities();
+        if (shinies.isEmpty() && barons.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -34,7 +44,7 @@ public class ShinyBeamRenderer {
 
         Matrix4f viewMatrix = context.matrixStack().peek().getPositionMatrix();
 
-        // --- Ligne du faisceau, du Pokémon shiny vers le joueur ---
+        // --- Lignes des faisceaux, du Pokémon vers le joueur ---
         RenderSystem.setShader(GameRenderer::getPositionColorProgram);
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
@@ -46,7 +56,25 @@ public class ShinyBeamRenderer {
         Tessellator tessellator = Tessellator.getInstance();
         BufferBuilder buffer = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
 
-        for (PokemonEntity pe : shinies) {
+        appendBeams(buffer, viewMatrix, shinies, camPos, playerEyes, tickDelta, SHINY_R, SHINY_G, SHINY_B);
+        appendBeams(buffer, viewMatrix, barons,  camPos, playerEyes, tickDelta, BARON_R, BARON_G, BARON_B);
+
+        BufferRenderer.drawWithGlobalProgram(buffer.end());
+
+        // --- Textes de distance flottants devant le joueur, visibles à travers les blocs ---
+        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, shinies, "\u2728", SHINY_TEXT_COLOR, 0);
+        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, barons,  "\uD83D\uDC51", BARON_TEXT_COLOR, 12);
+
+        RenderSystem.enableDepthTest();
+        RenderSystem.enableCull();
+        RenderSystem.depthMask(true);
+        RenderSystem.disableBlend();
+    }
+
+    private static void appendBeams(BufferBuilder buffer, Matrix4f viewMatrix, Set<PokemonEntity> entities,
+                                    Vec3d camPos, Vec3d playerEyes, float tickDelta,
+                                    float r, float g, float b) {
+        for (PokemonEntity pe : entities) {
             if (pe == null || pe.isRemoved()) continue;
 
             Vec3d entityCenter = pe.getLerpedPos(tickDelta).add(0, pe.getHeight() / 2.0, 0);
@@ -61,22 +89,29 @@ public class ShinyBeamRenderer {
             float ey = (float) (entityCenter.y - camPos.y + direction.y * distance);
             float ez = (float) (entityCenter.z - camPos.z + direction.z * distance);
 
-            buffer.vertex(viewMatrix, sx, sy, sz).color(R, G, B, A);
-            buffer.vertex(viewMatrix, ex, ey, ez).color(R, G, B, A);
+            buffer.vertex(viewMatrix, sx, sy, sz).color(r, g, b, ALPHA);
+            buffer.vertex(viewMatrix, ex, ey, ez).color(r, g, b, ALPHA);
         }
+    }
 
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
+    /**
+     * yOffset décale la ligne de texte : les barons s'affichent sous les shiny
+     * pour rester lisibles quand un Pokémon cumule les deux.
+     */
+    private static void drawLabels(WorldRenderContext context, MinecraftClient client, Camera camera,
+                                   Vec3d camPos, Vec3d playerEyes, float tickDelta,
+                                   Set<PokemonEntity> entities, String icon, int color, int yOffset) {
+        if (entities.isEmpty()) return;
 
-        // --- Texte de distance flottant devant le joueur, visible à travers les blocs ---
         TextRenderer textRenderer = client.textRenderer;
         MatrixStack matrices = context.matrixStack();
 
-        for (PokemonEntity pe : shinies) {
+        for (PokemonEntity pe : entities) {
             if (pe == null || pe.isRemoved()) continue;
 
             Vec3d entityCenter = pe.getLerpedPos(tickDelta).add(0, pe.getHeight() / 2.0, 0);
             double dist = entityCenter.distanceTo(playerEyes);
-            String label = "\u2728 " + (int) dist + "m";
+            String label = icon + " " + (int) dist + "m";
 
             Vec3d direction2 = entityCenter.subtract(playerEyes).normalize();
             Vec3d labelPos = playerEyes.add(direction2.multiply(1.5));
@@ -94,18 +129,13 @@ public class ShinyBeamRenderer {
             Matrix4f textMatrix = matrices.peek().getPositionMatrix();
             int textWidth = textRenderer.getWidth(label);
 
-            // SEE_THROUGH = visible à travers les blocs, couleur dorée
-            textRenderer.draw(label, -textWidth / 2f, 0, 0xFFD700, false,
+            // SEE_THROUGH = visible à travers les blocs
+            textRenderer.draw(label, -textWidth / 2f, yOffset, color, false,
                 textMatrix, client.getBufferBuilders().getEntityVertexConsumers(),
                 TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
             client.getBufferBuilders().getEntityVertexConsumers().draw();
 
             matrices.pop();
         }
-
-        RenderSystem.enableDepthTest();
-        RenderSystem.enableCull();
-        RenderSystem.depthMask(true);
-        RenderSystem.disableBlend();
     }
 }

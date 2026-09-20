@@ -39,12 +39,23 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static SoundEvent SHINY_SOUND;
     public static SoundEvent PARADOX_SOUND;
     public static SoundEvent INCLUDED_SOUND;
+    public static SoundEvent BARON_SOUND;
 
     public static boolean enableLegendary  = true;
     public static boolean enableMythic     = true;
     public static boolean enableUltraBeast = true;
     public static boolean enableParadox    = true;
     public static boolean enableShiny      = true;
+    public static boolean enableBaron      = true;
+
+    /**
+     * Motif recherché dans le nom affiché du Pokémon. Tropimon nomme ces spawns
+     * « Roucool le baron », « Roucool l'ancien baron », etc. La comparaison se
+     * fait sur un nom mis à plat (codes couleur §x retirés, accents supprimés,
+     * minuscules), donc une simple sous-chaîne suffit et attrape aussi les
+     * variantes au pluriel ou au féminin.
+     */
+    private static final String BARON_PATTERN = "baron";
 
     private static final Set<String> trackedPokemons = new HashSet<>();
     private static final Set<String> boardTrackedPokemons = new HashSet<>();
@@ -53,9 +64,14 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static final Set<java.util.UUID> announcedEntities = new HashSet<>();
 
     private static final Set<PokemonEntity> activeShinyEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<PokemonEntity> activeBaronEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     public static Set<PokemonEntity> getActiveShinyEntities() {
         return activeShinyEntities;
+    }
+
+    public static Set<PokemonEntity> getActiveBaronEntities() {
+        return activeBaronEntities;
     }
 
     private static class TrackedPending {
@@ -76,6 +92,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static boolean loopActive = false;
 
     private static final float SHINY_VOLUME = 3.0f;
+    private static final float BARON_VOLUME = 2.5f;
     private static final float TRACKED_VOLUME = 2.0f;
 
     private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
@@ -95,6 +112,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         SHINY_SOUND     = SoundEvent.of(Identifier.of("tropitracker", "shiny_spawn"));
         PARADOX_SOUND   = SoundEvent.of(Identifier.of("tropitracker", "paradox_spawn"));
         INCLUDED_SOUND  = SoundEvent.of(Identifier.of("tropitracker", "included_spawn"));
+        BARON_SOUND     = SoundEvent.of(Identifier.of("tropitracker", "baron_spawn"));
 
         muteKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
             "TropiTracker Mute",
@@ -117,6 +135,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 seenEntities.clear();
                 announcedEntities.clear();
                 activeShinyEntities.clear();
+                activeBaronEntities.clear();
                 loopActive = false;
                 activeLoopSound = null;
                 activeLoopVolume = 1.0f;
@@ -197,6 +216,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 SoundEvent foundSound = null;
                 float foundVolume = 1.0f;
                 Set<PokemonEntity> currentShinies = new HashSet<>();
+                Set<PokemonEntity> currentBarons = new HashSet<>();
 
                 for (Entity e : client.world.getEntities()) {
                     if (!(e instanceof PokemonEntity pe)) continue;
@@ -207,7 +227,11 @@ public class TropiTrackerClient implements ClientModInitializer {
                         currentShinies.add(pe);
                     }
 
-                    SoundEvent detectedSound = getSpecialSound(pe.getPokemon());
+                    if (isBaron(pe)) {
+                        currentBarons.add(pe);
+                    }
+
+                    SoundEvent detectedSound = getSpecialSound(pe);
 
                     if (detectedSound != null && !announcedEntities.contains(pe.getUuid())) {
                         handleSpawn(pe);
@@ -217,13 +241,19 @@ public class TropiTrackerClient implements ClientModInitializer {
                         specialFound = true;
                         foundSound = detectedSound;
                         boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
+                        boolean baronMatch = isBaron(pe);
                         boolean trackedMatch = isTrackedMatch(pe.getPokemon());
-                        foundVolume = shinyMatch ? SHINY_VOLUME : (trackedMatch ? TRACKED_VOLUME : 1.0f);
+                        foundVolume = shinyMatch ? SHINY_VOLUME
+                                    : (baronMatch ? BARON_VOLUME
+                                    : (trackedMatch ? TRACKED_VOLUME : 1.0f));
                     }
                 }
 
                 activeShinyEntities.clear();
                 activeShinyEntities.addAll(currentShinies);
+
+                activeBaronEntities.clear();
+                activeBaronEntities.addAll(currentBarons);
 
                 if (specialFound) {
                     activeLoopSound = foundSound;
@@ -264,6 +294,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             pendingEntities.remove(uuid);
             announcedEntities.remove(uuid);
             activeShinyEntities.remove(entity);
+            activeBaronEntities.remove(entity);
         });
 
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
@@ -374,6 +405,46 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Détection « baron »
+    // ------------------------------------------------------------------
+
+    /**
+     * Vrai si le nom affiché du Pokémon contient « baron ». Le surnom posé par
+     * le serveur peut arriver soit comme customName (renommage d'entité), soit
+     * directement dans le displayName construit par Cobblemon : les deux sont
+     * testés, un seul suffit à déclencher l'alerte.
+     */
+    public static boolean isBaron(PokemonEntity pe) {
+        if (!enableBaron || pe == null) return false;
+        return nameMatchesBaron(pe.getCustomName()) || nameMatchesBaron(pe.getDisplayName());
+    }
+
+    private static boolean nameMatchesBaron(Text text) {
+        if (text == null) return false;
+        String raw = text.getString();
+        if (raw == null || raw.isEmpty()) return false;
+        return flatten(raw).contains(BARON_PATTERN);
+    }
+
+    /** Nom lisible du Pokémon, codes couleur retirés, pour l'affichage. */
+    public static String getDisplayLabel(PokemonEntity pe) {
+        Text name = pe.getCustomName() != null ? pe.getCustomName() : pe.getDisplayName();
+        if (name == null) return "?";
+        return name.getString().replaceAll("§.", "").trim();
+    }
+
+    /** Minuscules, sans accents ni codes couleur Minecraft. */
+    private static String flatten(String s) {
+        String stripped = s.replaceAll("§.", "");
+        String noAccents = java.text.Normalizer
+            .normalize(stripped, java.text.Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "");
+        return noAccents.toLowerCase(java.util.Locale.ROOT);
+    }
+
+    // ------------------------------------------------------------------
+
     private static void handleSpawn(PokemonEntity pe) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
@@ -385,7 +456,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             return;
         }
 
-        SoundEvent sound = getSpecialSound(pokemon);
+        SoundEvent sound = getSpecialSound(pe);
         if (sound == null) {
             return;
         }
@@ -400,13 +471,19 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         Set<String> labels = pokemon.getSpecies().getLabels();
         boolean isShiny = pokemon.getShiny();
+        boolean baron = isBaron(pe);
         String message = "";
+
+        // Mention ajoutée aux alertes plus prioritaires, pour ne pas perdre l'info
+        String baronSuffix = baron ? " §5👑 BARON" : "";
 
         String frLower = frenchName.toLowerCase();
         if (isTracked(frLower, speciesName)) {
-            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "");
+            message = "§e🎯 Pokémon recherché apparu : §f" + frenchName + (isShiny ? " §6✨ SHINY ✨" : "") + baronSuffix;
         } else if (isShiny && enableShiny) {
-            message = "§6✨ Pokémon Shiny sauvage apparu : §e" + frenchName + " §6✨";
+            message = "§6✨ Pokémon Shiny sauvage apparu : §e" + frenchName + " §6✨" + baronSuffix;
+        } else if (baron) {
+            message = "§5👑 Baron sauvage apparu : §f" + getDisplayLabel(pe) + " §5👑";
         } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
             message = "§c⚡ Légendaire sauvage apparu : §f" + frenchName + " §c⚡";
         } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {
@@ -420,8 +497,10 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!message.isEmpty() && !muted) {
             SoundEvent finalSound = sound;
             boolean bigAlert = isShiny && enableShiny;
+            boolean baronAlert = baron && !bigAlert;
             boolean trackedAlert = isTrackedMatch(pokemon);
             String finalDisplayName = frenchName;
+            String finalBaronLabel = getDisplayLabel(pe);
             String finalMessage = message;
 
             client.execute(() -> {
@@ -430,6 +509,12 @@ public class TropiTrackerClient implements ClientModInitializer {
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
                     client.inGameHud.setTitleTicks(5, 70, 20);
                     client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
+                } else if (baronAlert) {
+                    client.inGameHud.setTitle(Text.literal("§5👑 BARON 👑"));
+                    client.inGameHud.setSubtitle(Text.literal("§d" + finalBaronLabel));
+                    client.inGameHud.setTitleTicks(5, 70, 20);
+                    client.player.sendMessage(Text.literal(finalMessage), false);
+                    client.player.playSound(finalSound, BARON_VOLUME, 1.0f);
                 } else {
                     float volume = trackedAlert ? TRACKED_VOLUME : 1.0f;
                     client.player.sendMessage(Text.literal(finalMessage), false);
@@ -439,7 +524,9 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
     }
 
-    private static SoundEvent getSpecialSound(Pokemon pokemon) {
+    private static SoundEvent getSpecialSound(PokemonEntity pe) {
+        Pokemon pokemon = pe.getPokemon();
+
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
         String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
@@ -454,6 +541,8 @@ public class TropiTrackerClient implements ClientModInitializer {
             return INCLUDED_SOUND;
         } else if (isShiny && enableShiny) {
             return SHINY_SOUND;
+        } else if (isBaron(pe)) {
+            return BARON_SOUND;
         } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
             return LEGENDARY_SOUND;
         } else if (enableMythic && hasLabel(labels, MYTHIC_LABELS)) {

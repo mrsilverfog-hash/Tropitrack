@@ -14,5 +14,9 @@
   "included_spawn": {
     "category": "master",
     "sounds": [{ "name": "tropitracker:included_spawn", "stream": false }]
+  },
+  "baron_spawn": {
+    "category": "master",
+    "sounds": [{ "name": "tropitracker:baron_spawn", "stream": false }]
   }
 }
