@@ -457,62 +457,135 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     /**
-     * Affiche en chat les trois sources de nom des Pokémon sauvages proches.
-     * Sert à vérifier laquelle porte réellement le « Baron » sur le serveur.
+     * Diagnostic : cherche la chaîne « baron » partout où elle peut se cacher,
+     * puisqu'elle n'est ni dans customName, ni dans displayName, ni dans le
+     * nickname. Trois pistes explorées : les autres entités du monde (une
+     * entité d'affichage séparée porterait le libellé), le DataTracker de
+     * l'entité Pokémon (le serveur peut y synchroniser un champ custom), et
+     * tous les accesseurs publics de l'objet Pokemon de Cobblemon.
      */
     private static void dumpNearbyNames() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null || client.player == null) return;
 
-        int count = 0;
+        java.util.List<String> hits = new java.util.ArrayList<>();
+        Vec3dHolder self = new Vec3dHolder(client.player.getX(), client.player.getY(), client.player.getZ());
+
+        // --- Piste 1 : toutes les entités du monde, tous types confondus ---
+        int scanned = 0;
+        for (Entity e : client.world.getEntities()) {
+            double dx = e.getX() - self.x, dy = e.getY() - self.y, dz = e.getZ() - self.z;
+            if (dx * dx + dy * dy + dz * dz > 48 * 48) continue;
+            scanned++;
+
+            String type = e.getType().toString();
+            check(hits, "entite[" + type + "].customName", e.getCustomName());
+            check(hits, "entite[" + type + "].displayName", e.getDisplayName());
+            check(hits, "entite[" + type + "].name", e.getName());
+        }
+        LOGGER.info("BARONDEBUG {} entites scannees dans un rayon de 48 blocs.", scanned);
+
+        // --- Pistes 2 et 3 : sur les 3 Pokémon sauvages les plus proches ---
+        int inspected = 0;
         for (Entity e : client.world.getEntities()) {
             if (!(e instanceof PokemonEntity pe)) continue;
             if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+            double dx = pe.getX() - self.x, dy = pe.getY() - self.y, dz = pe.getZ() - self.z;
+            if (dx * dx + dy * dy + dz * dz > 48 * 48) continue;
 
-            String custom  = pe.getCustomName()  != null ? pe.getCustomName().getString()  : "-";
-            String display = pe.getDisplayName() != null ? pe.getDisplayName().getString() : "-";
-            String nick    = nicknameOf(pe.getPokemon());
-            if (nick == null) nick = "-";
+            String tag = pe.getPokemon().getSpecies().getName();
 
-            LOGGER.info("BARONDEBUG custom='{}' | display='{}' | nick='{}' | isBaron={}",
-                custom, display, nick, isBaron(pe));
+            // DataTracker : champs synchronisés par le serveur
+            try {
+                java.util.List<?> entries = pe.getDataTracker().getChangedEntries();
+                if (entries != null) {
+                    for (Object entry : entries) {
+                        check(hits, "datatracker[" + tag + "]", String.valueOf(entry));
+                    }
+                }
+            } catch (Throwable t) {
+                LOGGER.info("BARONDEBUG datatracker illisible : {}", String.valueOf(t));
+            }
 
-            client.player.sendMessage(Text.literal(
-                (isBaron(pe) ? "§5👑 " : "§8• ")
-                + "§7custom=§f" + custom
-                + " §7| display=§f" + display
-                + " §7| nick=§f" + nick), false);
+            // Tous les accesseurs publics sans argument de l'objet Pokemon
+            Object pokemon = pe.getPokemon();
+            java.util.List<String> getterNames = new java.util.ArrayList<>();
+            for (java.lang.reflect.Method m : pokemon.getClass().getMethods()) {
+                if (m.getParameterCount() != 0) continue;
+                String n = m.getName();
+                if (!n.startsWith("get") && !n.startsWith("is")) continue;
+                if (n.equals("getClass")) continue;
+                getterNames.add(n);
+                try {
+                    Object v = m.invoke(pokemon);
+                    if (v == null) continue;
+                    String str = (v instanceof Text t2) ? t2.getString() : String.valueOf(v);
+                    check(hits, "Pokemon." + n + "[" + tag + "]", str);
+                } catch (Throwable ignored) {
+                }
+            }
 
-            count++;
-            if (count >= 12) break;
+            // Idem sur l'entité elle-même
+            for (java.lang.reflect.Method m : pe.getClass().getMethods()) {
+                if (m.getParameterCount() != 0) continue;
+                String n = m.getName();
+                if (!n.startsWith("get") && !n.startsWith("is")) continue;
+                if (n.equals("getClass")) continue;
+                try {
+                    Object v = m.invoke(pe);
+                    if (v == null) continue;
+                    String str = (v instanceof Text t2) ? t2.getString() : String.valueOf(v);
+                    if (str.length() > 400) continue;
+                    check(hits, "PokemonEntity." + n + "[" + tag + "]", str);
+                } catch (Throwable ignored) {
+                }
+            }
+
+            if (inspected == 0) {
+                java.util.Collections.sort(getterNames);
+                LOGGER.info("BARONDEBUG accesseurs Pokemon disponibles : {}", String.join(", ", getterNames));
+            }
+
+            inspected++;
+            if (inspected >= 3) break;
         }
 
-        client.player.sendMessage(Text.literal(
-            count == 0 ? "§cAucun Pokémon sauvage à portée."
-                       : "§a" + count + " Pokémon inspectés (détail aussi dans les logs)."), false);
+        // --- Restitution ---
+        for (String h : hits) {
+            LOGGER.info("BARONDEBUG TROUVE >>> {}", h);
+        }
+
+        if (hits.isEmpty()) {
+            client.player.sendMessage(Text.literal(
+                "§c« baron » introuvable côté client (§f" + scanned + "§c entités, §f" + inspected
+                + "§c Pokémon inspectés). Le libellé vient probablement d'un paquet non exposé."), false);
+        } else {
+            client.player.sendMessage(Text.literal("§a" + hits.size() + " piste(s) trouvée(s) :"), false);
+            int shown = 0;
+            for (String h : hits) {
+                client.player.sendMessage(Text.literal("§5👑 §f" + h), false);
+                if (++shown >= 10) break;
+            }
+        }
+        client.player.sendMessage(Text.literal("§7Détail complet dans les logs (filtre : BARONDEBUG)."), false);
     }
 
-    private static boolean nameMatchesBaron(Text text) {
-        if (text == null) return false;
-        String raw = text.getString();
-        if (raw == null || raw.isEmpty()) return false;
-        return flatten(raw).contains(BARON_PATTERN);
+    /** Retient la source si sa valeur contient « baron ». */
+    private static void check(java.util.List<String> hits, String source, Object value) {
+        if (value == null) return;
+        String str = (value instanceof Text text) ? text.getString() : String.valueOf(value);
+        if (str.isEmpty()) return;
+        if (!flatten(str).contains(BARON_PATTERN)) return;
+        String clean = str.replaceAll("§.", "").trim();
+        if (clean.length() > 200) clean = clean.substring(0, 200) + "…";
+        String line = source + " = \"" + clean + "\"";
+        if (!hits.contains(line)) hits.add(line);
     }
 
-    /** Nom lisible du Pokémon, codes couleur retirés, pour l'affichage. */
-    public static String getDisplayLabel(PokemonEntity pe) {
-        Text name = pe.getCustomName() != null ? pe.getCustomName() : pe.getDisplayName();
-        if (name == null) return "?";
-        return name.getString().replaceAll("§.", "").trim();
-    }
-
-    /** Minuscules, sans accents ni codes couleur Minecraft. */
-    private static String flatten(String s) {
-        String stripped = s.replaceAll("§.", "");
-        String noAccents = java.text.Normalizer
-            .normalize(stripped, java.text.Normalizer.Form.NFD)
-            .replaceAll("\\p{M}", "");
-        return noAccents.toLowerCase(java.util.Locale.ROOT);
+    /** Petit porteur de coordonnées, pour éviter une dépendance de plus. */
+    private static class Vec3dHolder {
+        final double x, y, z;
+        Vec3dHolder(double x, double y, double z) { this.x = x; this.y = y; this.z = z; }
     }
 
     // ------------------------------------------------------------------
