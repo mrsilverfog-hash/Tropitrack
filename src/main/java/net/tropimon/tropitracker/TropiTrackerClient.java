@@ -298,6 +298,10 @@ public class TropiTrackerClient implements ClientModInitializer {
         });
 
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
+            if (message.trim().equalsIgnoreCase("barondebug")) {
+                dumpNearbyNames();
+                return false;
+            }
             if (message.toLowerCase().startsWith("track ")) {
                 String pokemonName = message.substring(6).trim().toLowerCase();
                 handleTrackCommand(pokemonName);
@@ -417,7 +421,75 @@ public class TropiTrackerClient implements ClientModInitializer {
      */
     public static boolean isBaron(PokemonEntity pe) {
         if (!enableBaron || pe == null) return false;
-        return nameMatchesBaron(pe.getCustomName()) || nameMatchesBaron(pe.getDisplayName());
+        if (nameMatchesBaron(pe.getCustomName())) return true;
+        if (nameMatchesBaron(pe.getDisplayName())) return true;
+        String nick = nicknameOf(pe.getPokemon());
+        return nick != null && flatten(nick).contains(BARON_PATTERN);
+    }
+
+    /**
+     * Le surnom Cobblemon est lu par réflexion : selon la version du mod la
+     * méthode getNickname() peut manquer ou changer de type de retour, et une
+     * absence ne doit pas empêcher le reste de la détection de fonctionner.
+     */
+    private static java.lang.reflect.Method nicknameMethod = null;
+    private static boolean nicknameMethodResolved = false;
+
+    private static String nicknameOf(Pokemon pokemon) {
+        if (pokemon == null) return null;
+        if (!nicknameMethodResolved) {
+            nicknameMethodResolved = true;
+            try {
+                nicknameMethod = pokemon.getClass().getMethod("getNickname");
+            } catch (Throwable t) {
+                LOGGER.info("getNickname() indisponible sur Pokemon, détection baron basée sur le nom d'entité seul.");
+                nicknameMethod = null;
+            }
+        }
+        if (nicknameMethod == null) return null;
+        try {
+            Object value = nicknameMethod.invoke(pokemon);
+            if (value instanceof Text text) return text.getString();
+            if (value != null) return value.toString();
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    /**
+     * Affiche en chat les trois sources de nom des Pokémon sauvages proches.
+     * Sert à vérifier laquelle porte réellement le « Baron » sur le serveur.
+     */
+    private static void dumpNearbyNames() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.world == null || client.player == null) return;
+
+        int count = 0;
+        for (Entity e : client.world.getEntities()) {
+            if (!(e instanceof PokemonEntity pe)) continue;
+            if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+
+            String custom  = pe.getCustomName()  != null ? pe.getCustomName().getString()  : "-";
+            String display = pe.getDisplayName() != null ? pe.getDisplayName().getString() : "-";
+            String nick    = nicknameOf(pe.getPokemon());
+            if (nick == null) nick = "-";
+
+            LOGGER.info("BARONDEBUG custom='{}' | display='{}' | nick='{}' | isBaron={}",
+                custom, display, nick, isBaron(pe));
+
+            client.player.sendMessage(Text.literal(
+                (isBaron(pe) ? "§5👑 " : "§8• ")
+                + "§7custom=§f" + custom
+                + " §7| display=§f" + display
+                + " §7| nick=§f" + nick), false);
+
+            count++;
+            if (count >= 12) break;
+        }
+
+        client.player.sendMessage(Text.literal(
+            count == 0 ? "§cAucun Pokémon sauvage à portée."
+                       : "§a" + count + " Pokémon inspectés (détail aussi dans les logs)."), false);
     }
 
     private static boolean nameMatchesBaron(Text text) {
