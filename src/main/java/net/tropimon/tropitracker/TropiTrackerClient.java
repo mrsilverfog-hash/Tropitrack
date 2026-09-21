@@ -35,6 +35,13 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static KeyBinding muteKey;
     private static boolean muted = false;
 
+    /**
+     * Coupe uniquement les sons Shiny et Baron. Les faisceaux, titres et
+     * messages restent affichés, et les autres alertes continuent de sonner.
+     */
+    private static KeyBinding muteRareKey;
+    private static boolean rareMuted = false;
+
     public static SoundEvent LEGENDARY_SOUND;
     public static SoundEvent SHINY_SOUND;
     public static SoundEvent PARADOX_SOUND;
@@ -121,6 +128,13 @@ public class TropiTrackerClient implements ClientModInitializer {
             "TropiTracker"
         ));
 
+        muteRareKey = KeyBindingHelper.registerKeyBinding(new KeyBinding(
+            "TropiTracker Mute Shiny/Baron",
+            InputUtil.Type.KEYSYM,
+            GLFW.GLFW_KEY_UNKNOWN,
+            "TropiTracker"
+        ));
+
         WorldRenderEvents.LAST.register(ShinyBeamRenderer::render);
         BoardDetector.register();
         CatchDetector.register();
@@ -163,6 +177,18 @@ public class TropiTrackerClient implements ClientModInitializer {
 
             if (teleportCooldown > 0) {
                 teleportCooldown--;
+            }
+
+            while (muteRareKey.wasPressed()) {
+                rareMuted = !rareMuted;
+                if (client.player != null) {
+                    client.player.sendMessage(
+                        Text.literal(rareMuted
+                            ? "§cTropiTracker : Son Shiny/Baron coupé 🔇"
+                            : "§aTropiTracker : Son Shiny/Baron activé 🔊"),
+                        true
+                    );
+                }
             }
 
             while (muteKey.wasPressed()) {
@@ -237,7 +263,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                         handleSpawn(pe);
                     }
 
-                    if (!specialFound && detectedSound != null) {
+                    if (!specialFound && detectedSound != null && !isSilencedRare(detectedSound)) {
                         specialFound = true;
                         foundSound = detectedSound;
                         boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
@@ -790,17 +816,23 @@ public class TropiTrackerClient implements ClientModInitializer {
                     client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
                     client.inGameHud.setTitleTicks(5, 70, 20);
-                    client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
+                    if (!isSilencedRare(finalSound)) {
+                        client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
+                    }
                 } else if (baronAlert) {
                     client.inGameHud.setTitle(Text.literal("§c👑 BARON 👑"));
                     client.inGameHud.setSubtitle(Text.literal("§c" + finalBaronLabel));
                     client.inGameHud.setTitleTicks(5, 70, 20);
                     client.player.sendMessage(Text.literal(finalMessage), false);
-                    client.player.playSound(finalSound, BARON_VOLUME, 1.0f);
+                    if (!isSilencedRare(finalSound)) {
+                        client.player.playSound(finalSound, BARON_VOLUME, 1.0f);
+                    }
                 } else {
                     float volume = trackedAlert ? TRACKED_VOLUME : 1.0f;
                     client.player.sendMessage(Text.literal(finalMessage), false);
-                    client.player.playSound(finalSound, volume, 1.0f);
+                    if (!isSilencedRare(finalSound)) {
+                        client.player.playSound(finalSound, volume, 1.0f);
+                    }
                 }
             });
         }
@@ -835,6 +867,11 @@ public class TropiTrackerClient implements ClientModInitializer {
             return PARADOX_SOUND;
         }
         return null;
+    }
+
+    /** Vrai si le son est celui d'un Shiny ou d'un Baron et que ces sons sont coupés. */
+    private static boolean isSilencedRare(SoundEvent sound) {
+        return rareMuted && sound != null && (sound == SHINY_SOUND || sound == BARON_SOUND);
     }
 
     private static boolean hasLabel(Set<String> labels, Set<String> targets) {
