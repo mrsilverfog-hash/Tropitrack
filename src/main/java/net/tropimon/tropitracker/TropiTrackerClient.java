@@ -99,7 +99,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static boolean loopActive = false;
 
     private static final float SHINY_VOLUME = 3.0f;
-    private static final float BARON_VOLUME = 1.25f;
+    private static final float BARON_VOLUME = 0.6f;
     private static final float TRACKED_VOLUME = 2.0f;
 
     private static final Set<String> LEGENDARY_LABELS   = Set.of("legendary");
