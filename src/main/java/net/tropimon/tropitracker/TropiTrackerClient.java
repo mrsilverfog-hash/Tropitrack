@@ -263,7 +263,9 @@ public class TropiTrackerClient implements ClientModInitializer {
                         handleSpawn(pe);
                     }
 
-                    if (!specialFound && detectedSound != null && !isSilencedRare(detectedSound)) {
+                    // Baron : alerte et son une seule fois (dans handleSpawn), jamais en boucle
+                    if (!specialFound && detectedSound != null && detectedSound != BARON_SOUND
+                            && !isSilencedRare(detectedSound)) {
                         specialFound = true;
                         foundSound = detectedSound;
                         boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
