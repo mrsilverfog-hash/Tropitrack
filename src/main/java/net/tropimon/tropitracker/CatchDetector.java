@@ -2,6 +2,7 @@ package net.tropimon.tropitracker;
 
 import com.cobblemon.mod.common.entity.pokemon.PokemonEntity;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientEntityEvents;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.minecraft.client.MinecraftClient;
@@ -19,8 +20,12 @@ import java.util.regex.Pattern;
 /**
  * Détecte la capture d'un Pokémon du tableau de chasse et le retire du tracking automatique.
  *
- * Depuis que le serveur n'écrit plus « Chasse complétée » dans le tchat, le texte est
- * écouté sur TOUS les canaux d'affichage, pas seulement le tchat :
+ * Source principale : la notification « Chasse complétée » que le serveur envoie à
+ * TropimodClient (paquet ShowNotification, rangé dans son NotificationManager). Elle porte
+ * directement l'espèce (« cobblemon.species.<espèce>.name ») et est lue par réflexion
+ * à chaque tick, sans dépendance de compilation envers TropimodClient.
+ *
+ * En secours, le texte est écouté sur tous les canaux d'affichage classiques :
  *   - tchat (messages système)
  *   - barre d'action (au-dessus de la hotbar)
  *   - titre et sous-titre (gros texte au centre de l'écran)
@@ -36,7 +41,8 @@ import java.util.regex.Pattern;
  *
  * Commandes tapées dans le tchat (jamais envoyées au serveur) :
  *   untrack <nom>  -> retire à la main un Pokémon du tableau (nom français ou anglais)
- *   huntdebug      -> affiche dans le tchat tout ce qui passe en titre / barre d'action / toast
+ *   huntdebug      -> affiche dans le tchat les notifications Tropimon et ce qui passe
+ *                     en titre / barre d'action / toast
  */
 public class CatchDetector {
 
@@ -98,7 +104,19 @@ public class CatchDetector {
             }
         });
 
-        // 3. Commandes locales (enregistré avant celui de TropiTrackerClient, donc prioritaire)
+        // 3. Notifications Tropimon (TropimodClient) : la source fiable depuis la mise à jour
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            try {
+                pollTropimonNotifications();
+            } catch (Throwable t) {
+                if (!notifErrorLogged) {
+                    notifErrorLogged = true;
+                    TropiTrackerClient.LOGGER.warn("[Catch] Lecture des notifications Tropimon impossible", t);
+                }
+            }
+        });
+
+        // 4. Commandes locales (enregistré avant celui de TropiTrackerClient, donc prioritaire)
         ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
             String trimmed = message.trim();
             String lower = trimmed.toLowerCase(Locale.ROOT);
@@ -117,6 +135,155 @@ public class CatchDetector {
         });
 
         TropiTrackerClient.LOGGER.info("CatchDetector enregistré (tchat, barre d'action, titres, toasts, disparitions)");
+    }
+
+    // ------------------------------------------------------------------
+    // Notifications Tropimon (lues par réflexion dans TropimodClient)
+    // ------------------------------------------------------------------
+    //
+    // Le serveur envoie un paquet « ShowNotification » que TropimodClient range dans
+    // NotificationManager (file d'attente QUEUE + notification affichée current / pinned).
+    // La notification de chasse a pour titre « gui.tropimod.notification.hunt.title »
+    // et son premier argument de description est « cobblemon.species.<espèce>.name ».
+
+    private static final String NOTIF_MANAGER_CLASS = "fr.erusel.tropimodclient.client.notification.NotificationManager";
+    private static final String NOTIF_CLASS = "fr.tropimon.tropimoncore.data.notification.Notification";
+    private static final String HUNT_TITLE_KEY = "gui.tropimod.notification.hunt.title";
+    private static final Pattern SPECIES_KEY = Pattern.compile("^cobblemon\\.species\\.([a-z0-9_\\-]+)\\.name$");
+
+    private static boolean notifResolved = false;
+    private static boolean notifErrorLogged = false;
+    private static Class<?> notifManager = null;
+    private static java.lang.reflect.Method notifCurrent = null;
+    private static java.lang.reflect.Method notifPinned = null;
+    private static java.lang.reflect.Field notifQueue = null;
+    private static final java.util.Set<String> seenNotifIds = new java.util.HashSet<>();
+    private static final java.util.Set<Object> seenNotifObjects =
+        java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+
+    private static void pollTropimonNotifications() throws Exception {
+        if (!notifResolved) {
+            notifResolved = true;
+            try {
+                notifManager = Class.forName(NOTIF_MANAGER_CLASS);
+            } catch (ClassNotFoundException e) {
+                TropiTrackerClient.LOGGER.info("[Catch] TropimodClient absent : notifications Tropimon non lues.");
+                return;
+            }
+            try { notifCurrent = notifManager.getMethod("current"); } catch (NoSuchMethodException ignored) { }
+            try { notifPinned = notifManager.getMethod("pinned"); } catch (NoSuchMethodException ignored) { }
+            try {
+                notifQueue = notifManager.getDeclaredField("QUEUE");
+                notifQueue.setAccessible(true);
+            } catch (NoSuchFieldException ignored) { }
+            TropiTrackerClient.LOGGER.info("[Catch] Notifications Tropimon branchées (current={}, pinned={}, queue={})",
+                notifCurrent != null, notifPinned != null, notifQueue != null);
+        }
+        if (notifManager == null) return;
+
+        if (notifQueue != null) {
+            Object q = notifQueue.get(null);
+            if (q instanceof java.util.List<?> list) {
+                Object[] snapshot;
+                synchronized (list) {
+                    snapshot = list.toArray();
+                }
+                for (Object pending : snapshot) handleNotificationHolder(pending);
+            }
+        }
+        if (notifCurrent != null) handleNotificationHolder(notifCurrent.invoke(null));
+        if (notifPinned != null) handleNotificationHolder(notifPinned.invoke(null));
+    }
+
+    /** Accepte une Notification, une ActiveNotification ou un Pending de la file. */
+    private static void handleNotificationHolder(Object holder) throws Exception {
+        if (holder == null) return;
+        Object notif = extractNotification(holder);
+        if (notif == null) return;
+
+        String id = String.valueOf(call(notif, "id"));
+        if (id != null && !id.equals("null") && !id.isEmpty()) {
+            if (!seenNotifIds.add(id)) return;
+        } else if (!seenNotifObjects.add(notif)) {
+            return;
+        }
+        if (seenNotifIds.size() > 300) seenNotifIds.clear();
+        if (seenNotifObjects.size() > 300) seenNotifObjects.clear();
+
+        onTropimonNotification(notif);
+    }
+
+    private static Object extractNotification(Object o) throws Exception {
+        if (o.getClass().getName().equals(NOTIF_CLASS)) return o;
+        try {
+            java.lang.reflect.Method getter = o.getClass().getMethod("notification");
+            getter.setAccessible(true);
+            Object n = getter.invoke(o);
+            if (n != null && n.getClass().getName().equals(NOTIF_CLASS)) return n;
+        } catch (NoSuchMethodException ignored) {
+        }
+        for (java.lang.reflect.Field f : o.getClass().getDeclaredFields()) {
+            if (!f.getType().getName().equals(NOTIF_CLASS)) continue;
+            f.setAccessible(true);
+            return f.get(o);
+        }
+        return null;
+    }
+
+    private static void onTropimonNotification(Object notif) throws Exception {
+        String titleKey = textValue(call(notif, "title"));
+        java.util.List<String> args = new java.util.ArrayList<>();
+        Object desc = call(notif, "description");
+        Object rawArgs = desc == null ? null : call(desc, "args");
+        if (rawArgs instanceof java.util.List<?> list) {
+            for (Object a : list) args.add(String.valueOf(call(a, "text")));
+        }
+
+        if (debugHud) {
+            say("§7[notif] §f" + titleKey + " §7" + args);
+        }
+        TropiTrackerClient.LOGGER.info("[Catch] Notification Tropimon : {} {}", titleKey, args);
+
+        if (titleKey == null || !titleKey.equals(HUNT_TITLE_KEY)) return;
+
+        for (String arg : args) {
+            Matcher m = SPECIES_KEY.matcher(arg);
+            if (!m.find()) continue;
+            String species = m.group(1).toLowerCase(Locale.ROOT);
+            if (!TropiTrackerClient.isBoardTracked(species)) {
+                // Noms à ponctuation (ex : mr. mime / mrmime) : on repasse par la table des noms
+                String alt = getNameMap().get(flatten(species));
+                if (alt != null) species = alt;
+            }
+            TropiTrackerClient.LOGGER.info("[Catch] Chasse complétée (notification) : {}", species);
+            if (TropiTrackerClient.isBoardTracked(species)) {
+                TropiTrackerClient.removeBoardTarget(species);
+                lastMatchTime = System.currentTimeMillis();
+                pendingCatchSpecies = null;
+                pendingCompletionTime = -1L;
+            }
+            return;
+        }
+
+        // Titre de chasse mais espèce introuvable : on retombe sur les autres indices
+        onCompletionMessage();
+    }
+
+    private static String textValue(Object notificationText) throws Exception {
+        if (notificationText == null) return null;
+        Object v = call(notificationText, "value");
+        return v == null ? null : v.toString();
+    }
+
+    private static Object call(Object target, String method) throws Exception {
+        if (target == null) return null;
+        try {
+            java.lang.reflect.Method m = target.getClass().getMethod(method);
+            m.setAccessible(true);
+            return m.invoke(target);
+        } catch (NoSuchMethodException e) {
+            return null;
+        }
     }
 
     // ------------------------------------------------------------------
