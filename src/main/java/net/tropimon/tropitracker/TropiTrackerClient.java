@@ -138,6 +138,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         WorldRenderEvents.LAST.register(ShinyBeamRenderer::render);
         BoardDetector.register();
         CatchDetector.register();
+        RadarDetector.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;
@@ -807,6 +808,8 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!message.isEmpty() && !muted) {
             SoundEvent finalSound = sound;
             boolean bigAlert = isShiny && enableShiny;
+            // Shiny déjà annoncé par le radar : pas de second titre ni de second son
+            boolean radarAlready = bigAlert && RadarDetector.wasAlerted(pe.getId());
             boolean baronAlert = baron && !bigAlert;
             boolean trackedAlert = isTrackedMatch(pokemon);
             String finalDisplayName = frenchName;
@@ -814,7 +817,9 @@ public class TropiTrackerClient implements ClientModInitializer {
             String finalMessage = message;
 
             client.execute(() -> {
-                if (bigAlert) {
+                if (radarAlready) {
+                    client.player.sendMessage(Text.literal("§6✨ Shiny repéré au radar maintenant en vue : §e" + finalDisplayName), false);
+                } else if (bigAlert) {
                     client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
                     client.inGameHud.setTitleTicks(5, 70, 20);
@@ -872,6 +877,19 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     /** Vrai si le son est celui d'un Shiny ou d'un Baron et que ces sons sont coupés. */
+    /** Vrai si ce Pokémon a déjà été annoncé par la détection normale. */
+    public static boolean isAnnouncedEntity(Entity e) {
+        return e != null && announcedEntities.contains(e.getUuid());
+    }
+
+    /** Son shiny joué quand le radar repère un shiny encore hors de portée (respecte les deux mutes). */
+    public static void playRadarShinySound() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || muted || !enableShiny) return;
+        if (isSilencedRare(SHINY_SOUND)) return;
+        client.player.playSound(SHINY_SOUND, SHINY_VOLUME, 1.0f);
+    }
+
     private static boolean isSilencedRare(SoundEvent sound) {
         return rareMuted && sound != null && (sound == SHINY_SOUND || sound == BARON_SOUND);
     }

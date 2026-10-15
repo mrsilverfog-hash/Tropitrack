@@ -35,7 +35,8 @@ public class ShinyBeamRenderer {
 
         Set<PokemonEntity> shinies = TropiTrackerClient.getActiveShinyEntities();
         Set<PokemonEntity> barons  = TropiTrackerClient.getActiveBaronEntities();
-        if (shinies.isEmpty() && barons.isEmpty()) return;
+        java.util.List<Vec3d> farShinies = RadarDetector.getFarShinyPositions();
+        if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -58,12 +59,14 @@ public class ShinyBeamRenderer {
 
         appendBeams(buffer, viewMatrix, shinies, camPos, playerEyes, tickDelta, SHINY_R, SHINY_G, SHINY_B);
         appendBeams(buffer, viewMatrix, barons,  camPos, playerEyes, tickDelta, BARON_R, BARON_G, BARON_B);
+        appendPositionBeams(buffer, viewMatrix, farShinies, camPos, playerEyes, SHINY_R, SHINY_G, SHINY_B);
 
         BufferRenderer.drawWithGlobalProgram(buffer.end());
 
         // --- Textes de distance flottants devant le joueur, visibles à travers les blocs ---
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, shinies, "\u2728", SHINY_TEXT_COLOR, 0);
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, barons,  "\uD83D\uDC51", BARON_TEXT_COLOR, 12);
+        drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "\u2728", SHINY_TEXT_COLOR, 24);
 
         RenderSystem.enableDepthTest();
         RenderSystem.enableCull();
@@ -91,6 +94,59 @@ public class ShinyBeamRenderer {
 
             buffer.vertex(viewMatrix, sx, sy, sz).color(r, g, b, ALPHA);
             buffer.vertex(viewMatrix, ex, ey, ez).color(r, g, b, ALPHA);
+        }
+    }
+
+    /** Faisceaux vers des positions fournies par le radar (Pokémon pas encore chargé côté client). */
+    private static void appendPositionBeams(BufferBuilder buffer, Matrix4f viewMatrix, java.util.List<Vec3d> positions,
+                                            Vec3d camPos, Vec3d playerEyes, float r, float g, float b) {
+        for (Vec3d target : positions) {
+            Vec3d direction = playerEyes.subtract(target).normalize();
+            double distance = Math.max(0, target.distanceTo(playerEyes) - 1.0);
+
+            float sx = (float) (target.x - camPos.x);
+            float sy = (float) (target.y - camPos.y);
+            float sz = (float) (target.z - camPos.z);
+
+            float ex = (float) (target.x - camPos.x + direction.x * distance);
+            float ey = (float) (target.y - camPos.y + direction.y * distance);
+            float ez = (float) (target.z - camPos.z + direction.z * distance);
+
+            buffer.vertex(viewMatrix, sx, sy, sz).color(r, g, b, ALPHA);
+            buffer.vertex(viewMatrix, ex, ey, ez).color(r, g, b, ALPHA);
+        }
+    }
+
+    /** Distance affichée devant le joueur pour les shiny repérés au radar (suffixe « radar »). */
+    private static void drawPositionLabels(WorldRenderContext context, MinecraftClient client, Camera camera,
+                                           Vec3d camPos, Vec3d playerEyes, java.util.List<Vec3d> positions,
+                                           String icon, int color, int yOffset) {
+        if (positions.isEmpty()) return;
+        TextRenderer textRenderer = client.textRenderer;
+        MatrixStack matrices = context.matrixStack();
+
+        int line = 0;
+        for (Vec3d target : positions) {
+            double dist = target.distanceTo(playerEyes);
+            String label = icon + " " + (int) dist + "m (radar)";
+
+            Vec3d direction2 = target.subtract(playerEyes).normalize();
+            Vec3d labelPos = playerEyes.add(direction2.multiply(1.5));
+
+            matrices.push();
+            matrices.translate(labelPos.x - camPos.x, labelPos.y - camPos.y, labelPos.z - camPos.z);
+            matrices.multiply(camera.getRotation());
+            float scale = 0.008f;
+            matrices.scale(scale, -scale, scale);
+
+            Matrix4f textMatrix = matrices.peek().getPositionMatrix();
+            int textWidth = textRenderer.getWidth(label);
+            textRenderer.draw(label, -textWidth / 2f, yOffset + line * 12, color, false,
+                textMatrix, client.getBufferBuilders().getEntityVertexConsumers(),
+                TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
+            client.getBufferBuilders().getEntityVertexConsumers().draw();
+
+            matrices.pop();
         }
     }
 
