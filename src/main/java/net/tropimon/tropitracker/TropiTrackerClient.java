@@ -364,7 +364,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         for (String speciesName : speciesNames) {
             String lower = speciesName.toLowerCase();
             newSet.add(lower);
-            String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + lower + ".name");
+            String frenchName = translateSpecies(lower);
             if (!frenchName.equals("cobblemon.species." + lower + ".name")) {
                 newSet.add(frenchName.toLowerCase());
             }
@@ -385,7 +385,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         if (!boardSpeciesCanonical.remove(lower)) return;
 
         boardTrackedPokemons.remove(lower);
-        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + lower + ".name");
+        String frenchName = translateSpecies(lower);
         if (!frenchName.equals("cobblemon.species." + lower + ".name")) {
             boardTrackedPokemons.remove(frenchName.toLowerCase());
         }
@@ -775,7 +775,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         announcedEntities.add(pe.getUuid());
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        String frenchName = translateSpecies(speciesName);
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
         }
@@ -849,7 +849,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         Pokemon pokemon = pe.getPokemon();
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        String frenchName = translateSpecies(speciesName);
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
         }
@@ -904,12 +904,31 @@ public class TropiTrackerClient implements ClientModInitializer {
     private static boolean isTrackedMatch(Pokemon pokemon) {
         if (trackedPokemons.isEmpty() && boardTrackedPokemons.isEmpty()) return false;
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
-        String frenchName = net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + speciesName + ".name");
+        String frenchName = translateSpecies(speciesName);
         if (frenchName.equals("cobblemon.species." + speciesName + ".name")) {
             frenchName = pokemon.getSpecies().getName();
         }
         String frLower = frenchName.toLowerCase();
         return isTracked(frLower, speciesName);
+    }
+
+    /**
+     * Traduction « cobblemon.species.<espèce>.name » mise en cache : le scan appelle ça pour chaque
+     * Pokémon visible chaque seconde, inutile de refaire la recherche de traduction à chaque fois.
+     * Renvoie la clé elle-même si aucune traduction n'existe (même comportement qu'I18n.translate).
+     */
+    private static final java.util.Map<String, String> speciesNameCache = new java.util.concurrent.ConcurrentHashMap<>();
+    private static String speciesCacheLanguage = null;
+
+    private static String translateSpecies(String speciesLower) {
+        MinecraftClient client = MinecraftClient.getInstance();
+        String lang = client.getLanguageManager() == null ? "" : client.getLanguageManager().getLanguage();
+        if (!lang.equals(speciesCacheLanguage)) {
+            speciesNameCache.clear();
+            speciesCacheLanguage = lang;
+        }
+        return speciesNameCache.computeIfAbsent(speciesLower, sp ->
+            net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + sp + ".name"));
     }
 
     private static String capitalize(String s) {
