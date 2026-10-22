@@ -167,19 +167,21 @@ public class RadarDetector {
     }
 
     private static void announce(MinecraftClient client, boolean alpha, int dist) {
+        if (TropiTrackerClient.isPaused()) return; // pause : marqué comme vu, mais aucune alerte
         String what = alpha ? "§6✨ SHINY ALPHA ✨" : "§6✨ SHINY ✨";
         TropiTrackerClient.LOGGER.info("[Radar] Shiny détecté au radar à {} m (alpha={})", dist, alpha);
         client.execute(() -> {
             if (client.player == null) return;
             client.inGameHud.setTitle(Text.literal(what));
             client.inGameHud.setSubtitle(Text.literal("§eRadar : à " + dist + " m"));
-            client.inGameHud.setTitleTicks(3, 35, 10);
+            client.inGameHud.setTitleTicks(2, 22, 6);
             client.player.sendMessage(Text.literal("§6✨ Shiny repéré au radar à §e" + dist + " m §6✨"), false);
             TropiTrackerClient.playRadarShinySound();
         });
     }
 
     private static void announceHunt(MinecraftClient client, int dist) {
+        if (TropiTrackerClient.isPaused()) return;
         TropiTrackerClient.LOGGER.info("[Radar] Pokémon de la chasse détecté au radar à {} m", dist);
         client.execute(() -> {
             if (client.player == null) return;

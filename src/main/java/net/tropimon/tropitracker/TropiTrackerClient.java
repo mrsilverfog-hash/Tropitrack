@@ -33,7 +33,16 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static final Logger LOGGER = LoggerFactory.getLogger("tropitracker");
 
     private static KeyBinding muteKey;
-    private static boolean muted = false;
+    /**
+     * Pause complète (touche « TropiTracker Mute », « * » chez Maître) : plus aucun son, message,
+     * titre ni faisceau. La détection continue en silence et rien n'est oublié (tableau de chasse,
+     * liste /track, Pokémon déjà vus) : à la reprise tout revient comme avant, sans rejouer d'alertes.
+     */
+    private static boolean paused = false;
+
+    public static boolean isPaused() {
+        return paused;
+    }
 
     /**
      * Coupe uniquement les sons Shiny et Baron. Les faisceaux, titres et
@@ -201,10 +210,10 @@ public class TropiTrackerClient implements ClientModInitializer {
             }
 
             while (muteKey.wasPressed()) {
-                muted = !muted;
+                paused = !paused;
                 if (client.player != null) {
                     client.player.sendMessage(
-                        Text.literal(muted ? "§cTropiTracker : Son coupé 🔇" : "§aTropiTracker : Son activé 🔊"),
+                        Text.literal(paused ? "§cTropiTracker : en pause ⏸ (aucune alerte)" : "§aTropiTracker : réactivé ▶"),
                         true
                     );
                 }
@@ -311,7 +320,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 }
             }
 
-            if (loopActive && !muted && activeLoopSound != null) {
+            if (loopActive && !paused && activeLoopSound != null) {
                 soundPlaybackTick++;
                 if (soundPlaybackTick >= 60) {
                     soundPlaybackTick = 0;
@@ -409,6 +418,7 @@ public class TropiTrackerClient implements ClientModInitializer {
 
         LOGGER.info("Capture confirmée, retiré du tracking automatique : {}", lower);
 
+        if (paused) return; // retiré en silence pendant la pause
         MinecraftClient client = MinecraftClient.getInstance();
         client.execute(() -> {
             if (client.player != null) {
@@ -822,7 +832,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             message = "§5⚔ Pokémon Paradoxe sauvage apparu : §f" + frenchName + " §5⚔";
         }
 
-        if (!message.isEmpty() && !muted) {
+        if (!message.isEmpty() && !paused) {
             SoundEvent finalSound = sound;
             boolean bigAlert = isShiny && enableShiny;
             // Shiny déjà annoncé par le radar : pas de second titre ni de second son
@@ -842,14 +852,14 @@ public class TropiTrackerClient implements ClientModInitializer {
                 } else if (bigAlert) {
                     client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
-                    client.inGameHud.setTitleTicks(3, 35, 10);
+                    client.inGameHud.setTitleTicks(2, 22, 6);
                     if (!isSilencedRare(finalSound)) {
                         client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
                     }
                 } else if (baronAlert) {
                     client.inGameHud.setTitle(Text.literal("§c👑 BARON 👑"));
                     client.inGameHud.setSubtitle(Text.literal("§c" + finalBaronLabel));
-                    client.inGameHud.setTitleTicks(3, 35, 10);
+                    client.inGameHud.setTitleTicks(2, 22, 6);
                     client.player.sendMessage(Text.literal(finalMessage), false);
                     if (!isSilencedRare(finalSound)) {
                         client.player.playSound(finalSound, BARON_VOLUME, 1.0f);
@@ -908,13 +918,13 @@ public class TropiTrackerClient implements ClientModInitializer {
     /** Son « Pokémon recherché » joué quand le radar repère un Pokémon de la chasse hors de portée. */
     public static void playRadarTrackedSound() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null || muted) return;
+        if (client.player == null || paused) return;
         client.player.playSound(INCLUDED_SOUND, TRACKED_VOLUME, 1.0f);
     }
 
     public static void playRadarShinySound() {
         MinecraftClient client = MinecraftClient.getInstance();
-        if (client.player == null || muted || !enableShiny) return;
+        if (client.player == null || paused || !enableShiny) return;
         if (isSilencedRare(SHINY_SOUND)) return;
         client.player.playSound(SHINY_SOUND, SHINY_VOLUME, 1.0f);
     }

@@ -38,6 +38,7 @@ public class ShinyBeamRenderer {
     public static void render(WorldRenderContext context) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null || client.player == null) return;
+        if (TropiTrackerClient.isPaused()) return; // pause : aucun faisceau
 
         Set<PokemonEntity> shinies = TropiTrackerClient.getActiveShinyEntities();
         Set<PokemonEntity> barons  = TropiTrackerClient.getActiveBaronEntities();
