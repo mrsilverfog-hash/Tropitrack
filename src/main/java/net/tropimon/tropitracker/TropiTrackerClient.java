@@ -829,6 +829,9 @@ public class TropiTrackerClient implements ClientModInitializer {
             boolean radarAlready = bigAlert && RadarDetector.wasAlerted(pe.getId());
             boolean baronAlert = baron && !bigAlert;
             boolean trackedAlert = isTrackedMatch(pokemon);
+            // Pokémon chassé déjà annoncé par le radar : message court, sans second son
+            boolean radarTrackedAlready = !bigAlert && !baronAlert && trackedAlert
+                && RadarDetector.wasAlerted(pe.getId());
             String finalDisplayName = frenchName;
             String finalBaronLabel = getDisplayLabel(pe);
             String finalMessage = message;
@@ -839,18 +842,20 @@ public class TropiTrackerClient implements ClientModInitializer {
                 } else if (bigAlert) {
                     client.inGameHud.setTitle(Text.literal("§6✨ SHINY ✨"));
                     client.inGameHud.setSubtitle(Text.literal("§e" + finalDisplayName));
-                    client.inGameHud.setTitleTicks(5, 70, 20);
+                    client.inGameHud.setTitleTicks(3, 35, 10);
                     if (!isSilencedRare(finalSound)) {
                         client.player.playSound(finalSound, SHINY_VOLUME, 1.0f);
                     }
                 } else if (baronAlert) {
                     client.inGameHud.setTitle(Text.literal("§c👑 BARON 👑"));
                     client.inGameHud.setSubtitle(Text.literal("§c" + finalBaronLabel));
-                    client.inGameHud.setTitleTicks(5, 70, 20);
+                    client.inGameHud.setTitleTicks(3, 35, 10);
                     client.player.sendMessage(Text.literal(finalMessage), false);
                     if (!isSilencedRare(finalSound)) {
                         client.player.playSound(finalSound, BARON_VOLUME, 1.0f);
                     }
+                } else if (radarTrackedAlready) {
+                    client.player.sendMessage(Text.literal("§e🎯 Pokémon recherché repéré au radar maintenant en vue : §f" + finalDisplayName), false);
                 } else {
                     float volume = trackedAlert ? TRACKED_VOLUME : 1.0f;
                     client.player.sendMessage(Text.literal(finalMessage), false);
@@ -900,6 +905,13 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     /** Son shiny joué quand le radar repère un shiny encore hors de portée (respecte les deux mutes). */
+    /** Son « Pokémon recherché » joué quand le radar repère un Pokémon de la chasse hors de portée. */
+    public static void playRadarTrackedSound() {
+        MinecraftClient client = MinecraftClient.getInstance();
+        if (client.player == null || muted) return;
+        client.player.playSound(INCLUDED_SOUND, TRACKED_VOLUME, 1.0f);
+    }
+
     public static void playRadarShinySound() {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null || muted || !enableShiny) return;

@@ -43,11 +43,14 @@ public class RadarDetector {
 
     // Shiny repérés au radar mais pas encore chargés côté client : position pour le faisceau
     private static volatile List<Vec3d> farShinyPositions = new ArrayList<>();
+    // Pokémon de la chasse (icône « hunt ») repérés au radar mais pas encore chargés
+    private static volatile List<Vec3d> farHuntPositions = new ArrayList<>();
 
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) {
                 farShinyPositions = new ArrayList<>();
+                farHuntPositions = new ArrayList<>();
                 return;
             }
             if (++tick < POLL_INTERVAL_TICKS) return;
@@ -72,6 +75,10 @@ public class RadarDetector {
         return farShinyPositions;
     }
 
+    public static List<Vec3d> getFarHuntPositions() {
+        return farHuntPositions;
+    }
+
     private static void poll(MinecraftClient client) throws Exception {
         if (!resolved) {
             resolved = true;
@@ -90,6 +97,7 @@ public class RadarDetector {
         Object data = shownField.get(null);
         if (data == null) {
             farShinyPositions = new ArrayList<>();
+            farHuntPositions = new ArrayList<>();
             return;
         }
 
@@ -97,13 +105,16 @@ public class RadarDetector {
         if (!(blipsObj instanceof List<?> blips)) return;
 
         List<Vec3d> far = new ArrayList<>();
+        List<Vec3d> farHunt = new ArrayList<>();
         Set<Integer> stillPresent = new HashSet<>();
 
         for (Object blip : blips) {
             if (blip == null) continue;
             Object icon = call(blip, "icon");
             String iconId = icon == null ? "" : String.valueOf(call(icon, "id"));
-            if (!iconId.contains("shiny")) continue;
+            boolean shiny = iconId.contains("shiny");
+            boolean hunt = !shiny && iconId.equals("hunt");
+            if (!shiny && !hunt) continue;
 
             int id = ((Number) call(blip, "entityId")).intValue();
             int x = ((Number) call(blip, "x")).intValue();
@@ -115,7 +126,10 @@ public class RadarDetector {
             boolean isLoaded = loaded != null && !loaded.isRemoved();
 
             // Pas encore chargé : c'est au radar de fournir la position du faisceau
-            if (!isLoaded) far.add(new Vec3d(x + 0.5, y + 0.5, z + 0.5));
+            if (!isLoaded) {
+                Vec3d pos = new Vec3d(x + 0.5, y + 0.5, z + 0.5);
+                if (shiny) far.add(pos); else farHunt.add(pos);
+            }
 
             if (alertedIds.contains(id)) continue;
             // Déjà chargé ET déjà annoncé par la détection normale : rien à faire
@@ -125,14 +139,18 @@ public class RadarDetector {
             }
 
             alertedIds.add(id);
-            boolean alpha = iconId.contains("alpha");
             double dist = client.player.getPos().distanceTo(new Vec3d(x + 0.5, y + 0.5, z + 0.5));
-            announce(client, alpha, (int) dist);
+            if (shiny) {
+                announce(client, iconId.contains("alpha"), (int) dist);
+            } else {
+                announceHunt(client, (int) dist);
+            }
         }
 
         // On oublie les shiny qui ont quitté le radar (capturés, disparus...)
         alertedIds.retainAll(unionWithLoaded(client, stillPresent));
         farShinyPositions = far;
+        farHuntPositions = farHunt;
     }
 
     /**
@@ -155,9 +173,18 @@ public class RadarDetector {
             if (client.player == null) return;
             client.inGameHud.setTitle(Text.literal(what));
             client.inGameHud.setSubtitle(Text.literal("§eRadar : à " + dist + " m"));
-            client.inGameHud.setTitleTicks(5, 70, 20);
+            client.inGameHud.setTitleTicks(3, 35, 10);
             client.player.sendMessage(Text.literal("§6✨ Shiny repéré au radar à §e" + dist + " m §6✨"), false);
             TropiTrackerClient.playRadarShinySound();
+        });
+    }
+
+    private static void announceHunt(MinecraftClient client, int dist) {
+        TropiTrackerClient.LOGGER.info("[Radar] Pokémon de la chasse détecté au radar à {} m", dist);
+        client.execute(() -> {
+            if (client.player == null) return;
+            client.player.sendMessage(Text.literal("§e🎯 Pokémon recherché repéré au radar à §f" + dist + " m"), false);
+            TropiTrackerClient.playRadarTrackedSound();
         });
     }
 

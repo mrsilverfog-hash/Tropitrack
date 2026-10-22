@@ -43,7 +43,8 @@ public class ShinyBeamRenderer {
         Set<PokemonEntity> barons  = TropiTrackerClient.getActiveBaronEntities();
         java.util.List<Vec3d> farShinies = RadarDetector.getFarShinyPositions();
         Set<PokemonEntity> tracked = TropiTrackerClient.getActiveTrackedEntities();
-        if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty()) return;
+        java.util.List<Vec3d> farHunt = RadarDetector.getFarHuntPositions();
+        if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -68,6 +69,7 @@ public class ShinyBeamRenderer {
         appendBeams(buffer, viewMatrix, barons,  camPos, playerEyes, tickDelta, BARON_R, BARON_G, BARON_B);
         appendPositionBeams(buffer, viewMatrix, farShinies, camPos, playerEyes, SHINY_R, SHINY_G, SHINY_B);
         appendBeams(buffer, viewMatrix, tracked, camPos, playerEyes, tickDelta, TRACKED_R, TRACKED_G, TRACKED_B);
+        appendPositionBeams(buffer, viewMatrix, farHunt, camPos, playerEyes, TRACKED_R, TRACKED_G, TRACKED_B);
 
         BufferRenderer.drawWithGlobalProgram(buffer.end());
 
@@ -76,6 +78,7 @@ public class ShinyBeamRenderer {
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, barons,  "\uD83D\uDC51", BARON_TEXT_COLOR, 12);
         drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "\u2728", SHINY_TEXT_COLOR, 24);
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 36);
+        drawPositionLabels(context, client, camera, camPos, playerEyes, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 48);
 
         RenderSystem.enableDepthTest();
         RenderSystem.enableCull();
