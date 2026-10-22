@@ -77,6 +77,13 @@ public class TropiTrackerClient implements ClientModInitializer {
         return activeShinyEntities;
     }
 
+    // Pokémon chassés (/track ou tableau de chasse) visibles, hors shiny (le faisceau shiny prime)
+    private static final Set<PokemonEntity> activeTrackedEntities = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    public static Set<PokemonEntity> getActiveTrackedEntities() {
+        return activeTrackedEntities;
+    }
+
     public static Set<PokemonEntity> getActiveBaronEntities() {
         return activeBaronEntities;
     }
@@ -151,6 +158,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 announcedEntities.clear();
                 activeShinyEntities.clear();
                 activeBaronEntities.clear();
+                activeTrackedEntities.clear();
                 loopActive = false;
                 activeLoopSound = null;
                 activeLoopVolume = 1.0f;
@@ -244,6 +252,7 @@ public class TropiTrackerClient implements ClientModInitializer {
                 float foundVolume = 1.0f;
                 Set<PokemonEntity> currentShinies = new HashSet<>();
                 Set<PokemonEntity> currentBarons = new HashSet<>();
+                Set<PokemonEntity> currentTracked = new HashSet<>();
 
                 for (Entity e : client.world.getEntities()) {
                     if (!(e instanceof PokemonEntity pe)) continue;
@@ -256,6 +265,10 @@ public class TropiTrackerClient implements ClientModInitializer {
 
                     if (isBaron(pe)) {
                         currentBarons.add(pe);
+                    }
+
+                    if (!currentShinies.contains(pe) && isTrackedMatch(pe.getPokemon())) {
+                        currentTracked.add(pe);
                     }
 
                     SoundEvent detectedSound = getSpecialSound(pe);
@@ -283,6 +296,9 @@ public class TropiTrackerClient implements ClientModInitializer {
 
                 activeBaronEntities.clear();
                 activeBaronEntities.addAll(currentBarons);
+
+                activeTrackedEntities.clear();
+                activeTrackedEntities.addAll(currentTracked);
 
                 if (specialFound) {
                     activeLoopSound = foundSound;
@@ -324,6 +340,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             announcedEntities.remove(uuid);
             activeShinyEntities.remove(entity);
             activeBaronEntities.remove(entity);
+            activeTrackedEntities.remove(entity);
         });
 
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
