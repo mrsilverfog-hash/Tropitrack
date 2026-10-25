@@ -105,7 +105,10 @@ public class CatchDetector {
         });
 
         // 3. Notifications Tropimon (TropimodClient) : la source fiable depuis la mise à jour
+        // Lu 4 fois par seconde : une notification reste affichée plusieurs secondes
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (++notifPollTick < 5) return;
+            notifPollTick = 0;
             try {
                 pollTropimonNotifications();
             } catch (Throwable t) {
@@ -153,6 +156,7 @@ public class CatchDetector {
 
     private static boolean notifResolved = false;
     private static boolean notifErrorLogged = false;
+    private static int notifPollTick = 0;
     private static Class<?> notifManager = null;
     private static java.lang.reflect.Method notifCurrent = null;
     private static java.lang.reflect.Method notifPinned = null;
