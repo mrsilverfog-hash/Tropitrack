@@ -45,7 +45,10 @@ public class ShinyBeamRenderer {
         java.util.List<Vec3d> farShinies = RadarDetector.getFarShinyPositions();
         Set<PokemonEntity> tracked = TropiTrackerClient.getActiveTrackedEntities();
         java.util.List<Vec3d> farHunt = RadarDetector.getFarHuntPositions();
-        if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()) return;
+        java.util.List<Vec3d> hideouts = new java.util.ArrayList<>();
+        for (RustlingDetector.Spot spot : RustlingDetector.getSpots()) hideouts.add(spot.pos());
+        if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
+                && hideouts.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -74,12 +77,27 @@ public class ShinyBeamRenderer {
 
         BufferRenderer.drawWithGlobalProgram(buffer.end());
 
+        // --- Cachettes (rustling spots) : faisceau blanc à contour noir, lisible sur la neige ---
+        if (!hideouts.isEmpty()) {
+            RenderSystem.lineWidth(6.0f); // contour : ligne noire épaisse dessous
+            BufferBuilder outline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            appendPositionBeams(outline, viewMatrix, hideouts, camPos, playerEyes, 0f, 0f, 0f);
+            BufferRenderer.drawWithGlobalProgram(outline.end());
+
+            RenderSystem.lineWidth(2.5f); // cœur : ligne blanche par-dessus
+            BufferBuilder core = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            appendPositionBeams(core, viewMatrix, hideouts, camPos, playerEyes, 1f, 1f, 1f);
+            BufferRenderer.drawWithGlobalProgram(core.end());
+            RenderSystem.lineWidth(2.0f);
+        }
+
         // --- Textes de distance flottants devant le joueur, visibles à travers les blocs ---
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, shinies, "\u2728", SHINY_TEXT_COLOR, 0);
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, barons,  "\uD83D\uDC51", BARON_TEXT_COLOR, 12);
         drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "\u2728", SHINY_TEXT_COLOR, 24);
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 36);
         drawPositionLabels(context, client, camera, camPos, playerEyes, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 48);
+        drawOutlinedLabels(context, client, camera, camPos, playerEyes, hideouts, "\uD83C\uDF3F", 60);
 
         RenderSystem.enableDepthTest();
         RenderSystem.enableCull();
@@ -161,6 +179,40 @@ public class ShinyBeamRenderer {
 
             matrices.pop();
         }
+    }
+
+    /** Distance des cachettes : texte blanc entouré de noir (lisible sur la neige comme sur l'herbe). */
+    private static void drawOutlinedLabels(WorldRenderContext context, MinecraftClient client, Camera camera,
+                                           Vec3d camPos, Vec3d playerEyes, java.util.List<Vec3d> positions,
+                                           String icon, int yOffset) {
+        if (positions.isEmpty()) return;
+        TextRenderer textRenderer = client.textRenderer;
+        MatrixStack matrices = context.matrixStack();
+        net.minecraft.client.render.VertexConsumerProvider.Immediate consumers = client.getBufferBuilders().getEntityVertexConsumers();
+
+        for (Vec3d target : positions) {
+            String label = icon + " " + (int) target.distanceTo(playerEyes) + "m";
+            Vec3d labelPos = playerEyes.add(target.subtract(playerEyes).normalize().multiply(1.5));
+
+            matrices.push();
+            matrices.translate(labelPos.x - camPos.x, labelPos.y - camPos.y, labelPos.z - camPos.z);
+            matrices.multiply(camera.getRotation());
+            float scale = 0.008f;
+            matrices.scale(scale, -scale, scale);
+
+            Matrix4f textMatrix = matrices.peek().getPositionMatrix();
+            float x = -textRenderer.getWidth(label) / 2f;
+            // Contour noir : le texte décalé d'un pixel dans les 4 directions, puis le blanc au centre
+            int[][] offsets = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+            for (int[] o : offsets) {
+                textRenderer.draw(label, x + o[0], yOffset + o[1], 0x000000, false, textMatrix, consumers,
+                    TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
+            }
+            textRenderer.draw(label, x, yOffset, 0xFFFFFF, false, textMatrix, consumers,
+                TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
+            matrices.pop();
+        }
+        consumers.draw();
     }
 
     /**
