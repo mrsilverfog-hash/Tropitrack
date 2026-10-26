@@ -75,19 +75,19 @@ public class ShinyBeamRenderer {
         appendBeams(buffer, viewMatrix, tracked, camPos, playerEyes, tickDelta, TRACKED_R, TRACKED_G, TRACKED_B);
         appendPositionBeams(buffer, viewMatrix, farHunt, camPos, playerEyes, TRACKED_R, TRACKED_G, TRACKED_B);
 
-        BufferRenderer.drawWithGlobalProgram(buffer.end());
+        drawIfNotEmpty(buffer);
 
         // --- Cachettes (rustling spots) : faisceau blanc à contour noir, lisible sur la neige ---
         if (!hideouts.isEmpty()) {
             RenderSystem.lineWidth(6.0f); // contour : ligne noire épaisse dessous
             BufferBuilder outline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
             appendPositionBeams(outline, viewMatrix, hideouts, camPos, playerEyes, 0f, 0f, 0f);
-            BufferRenderer.drawWithGlobalProgram(outline.end());
+            drawIfNotEmpty(outline);
 
             RenderSystem.lineWidth(2.5f); // cœur : ligne blanche par-dessus
             BufferBuilder core = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
             appendPositionBeams(core, viewMatrix, hideouts, camPos, playerEyes, 1f, 1f, 1f);
-            BufferRenderer.drawWithGlobalProgram(core.end());
+            drawIfNotEmpty(core);
             RenderSystem.lineWidth(2.0f);
         }
 
@@ -103,6 +103,18 @@ public class ShinyBeamRenderer {
         RenderSystem.enableCull();
         RenderSystem.depthMask(true);
         RenderSystem.disableBlend();
+    }
+
+    /**
+     * Dessine le lot seulement s'il contient des sommets : BufferBuilder.end() plante
+     * (« BufferBuilder was empty ») quand rien n'a été ajouté, par exemple s'il n'y a que des
+     * cachettes à afficher et aucun Pokémon.
+     */
+    private static void drawIfNotEmpty(BufferBuilder buffer) {
+        BuiltBuffer built = buffer.endNullable();
+        if (built != null) {
+            BufferRenderer.drawWithGlobalProgram(built);
+        }
     }
 
     private static void appendBeams(BufferBuilder buffer, Matrix4f viewMatrix, Set<PokemonEntity> entities,
