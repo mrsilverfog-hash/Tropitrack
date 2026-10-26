@@ -107,6 +107,8 @@ public class RadarDetector {
         List<Vec3d> far = new ArrayList<>();
         List<Vec3d> farHunt = new ArrayList<>();
         Set<Integer> stillPresent = new HashSet<>();
+        // Les cachettes shiny apparaissent aussi au radar : elles ont leur propre alerte et faisceau
+        Set<Integer> spotIds = RustlingDetector.currentRadarIds();
 
         for (Object blip : blips) {
             if (blip == null) continue;
@@ -117,6 +119,7 @@ public class RadarDetector {
             if (!shiny && !hunt) continue;
 
             int id = ((Number) call(blip, "entityId")).intValue();
+            if (spotIds.contains(id)) continue;
             int x = ((Number) call(blip, "x")).intValue();
             int y = ((Number) call(blip, "y")).intValue();
             int z = ((Number) call(blip, "z")).intValue();

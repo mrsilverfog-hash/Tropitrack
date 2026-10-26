@@ -18,11 +18,15 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Détection des « rustling spots » (mod Cobblemon Rustling Spots, id « rustlingspots »).
+ * Détection des cachettes (« rustling spots »).
  *
- * Le serveur envoie au client chaque cachette active (paquet spot_spawn), que le mod range dans
- * RustlingSpotClientHandler.ACTIVE : identifiant, position, famille (herbe, sable, neige...) et
- * indicateur shiny. On lit cette liste par réflexion (aucune dépendance de compilation) :
+ * Source principale : TropimodClient (0.18+). Le serveur Tropimon envoie chaque cachette
+ * (RustlingSpotAddPayload / Remove / Sync), rangée dans ClientRustlingSpots.active() sous forme
+ * de RustlingSpot(id, pos, family, shiny) ; chaque cachette a aussi un identifiant radar
+ * (radarId), car les cachettes shiny apparaissent dans le radar avec l'icône shiny.
+ * Source de secours : le mod public Cobblemon Rustling Spots (RustlingSpotClientHandler).
+ *
+ * Les listes sont lues par réflexion (aucune dépendance de compilation) :
  *  - nouvelle cachette -> titre « Cachette détectée », message avec la distance et un son ;
  *  - tant qu'elle existe -> faisceau blanc à contour noir vers elle (dessiné par ShinyBeamRenderer).
  * La pause de TropiTracker (touche « * ») coupe tout, sans rien oublier.
@@ -30,6 +34,7 @@ import java.util.Set;
  */
 public class RustlingDetector {
 
+    private static final String TROPIMON_CLASS = "fr.erusel.tropimodclient.client.render.spot.ClientRustlingSpots";
     private static final String HANDLER_CLASS = "net.levelscraft7.rustlingspots.client.RustlingSpotClientHandler";
     private static final int POLL_INTERVAL_TICKS = 10;
 
@@ -72,14 +77,7 @@ public class RustlingDetector {
     private static void poll(MinecraftClient client) throws Exception {
         if (!resolved) {
             resolved = true;
-            try {
-                activeSpots = Class.forName(HANDLER_CLASS).getMethod("activeSpots");
-                activeSpots.setAccessible(true);
-                TropiTrackerClient.LOGGER.info("[Cachette] Rustling Spots détecté : détection des cachettes active.");
-            } catch (ClassNotFoundException | NoSuchMethodException e) {
-                TropiTrackerClient.LOGGER.info("[Cachette] Mod Rustling Spots absent : détection des cachettes inactive.");
-                activeSpots = null;
-            }
+            activeSpots = resolveSource();
         }
         if (activeSpots == null) return;
 
@@ -95,11 +93,11 @@ public class RustlingDetector {
 
         for (Object spot : raw) {
             if (spot == null) continue;
-            Object id = field(spot, "id");
-            Object posObj = field(spot, "pos");
+            Object id = value(spot, "id");
+            Object posObj = value(spot, "pos");
             if (!(posObj instanceof BlockPos pos)) continue;
-            Object familyObj = field(spot, "family");
-            Object shinyObj = field(spot, "shiny");
+            Object familyObj = value(spot, "family");
+            Object shinyObj = value(spot, "shiny");
             boolean shiny = shinyObj instanceof Boolean b && b;
             String family = familyName(familyObj == null ? "" : familyObj.toString());
 
@@ -116,6 +114,47 @@ public class RustlingDetector {
 
         announcedIds.retainAll(present);
         spots = found;
+    }
+
+    /** Cherche d'abord les cachettes de TropimodClient, puis celles du mod public. */
+    private static Method resolveSource() {
+        try {
+            Method m = Class.forName(TROPIMON_CLASS).getMethod("active");
+            m.setAccessible(true);
+            TropiTrackerClient.LOGGER.info("[Cachette] Cachettes Tropimon (TropimodClient) : détection active.");
+            return m;
+        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+        }
+        try {
+            Method m = Class.forName(HANDLER_CLASS).getMethod("activeSpots");
+            m.setAccessible(true);
+            TropiTrackerClient.LOGGER.info("[Cachette] Mod Rustling Spots : détection active.");
+            return m;
+        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
+        }
+        TropiTrackerClient.LOGGER.info("[Cachette] Aucune source de cachettes : détection inactive.");
+        return null;
+    }
+
+    /**
+     * Identifiants radar des cachettes actuelles (lus en direct), pour que le radar ne prenne pas
+     * une cachette shiny pour un Pokémon shiny.
+     */
+    public static Set<Integer> currentRadarIds() {
+        Set<Integer> ids = new HashSet<>();
+        if (!resolved || activeSpots == null) return ids;
+        try {
+            Object result = activeSpots.invoke(null);
+            if (!(result instanceof Iterable<?> iterable)) return ids;
+            List<Object> raw = new ArrayList<>();
+            for (Object o : iterable) raw.add(o);
+            for (Object spot : raw) {
+                Object rid = value(spot, "radarId");
+                if (rid instanceof Number n) ids.add(n.intValue());
+            }
+        } catch (Throwable ignored) {
+        }
+        return ids;
     }
 
     private static void announce(MinecraftClient client, String family, boolean shiny, int dist) {
@@ -143,14 +182,33 @@ public class RustlingDetector {
             case "SNOW" -> "Neige";
             case "LEAVES" -> "Feuillage";
             case "CAVE" -> "Grotte";
-            case "NETHERFLAMME" -> "Flamme du Nether";
-            case "SOULFLAME" -> "Flamme des âmes";
+            case "NETHERFLAMME", "NETHER_FLAME" -> "Flamme du Nether";
+            case "SOULFLAME", "SOUL_FLAME" -> "Flamme des âmes";
             case "FLYING" -> "Ciel";
             case "UNDERWATER" -> "Sous l'eau";
             case "END" -> "End";
             case "GEODE" -> "Géode";
             default -> enumName.isEmpty() ? "?" : enumName;
         };
+    }
+
+    private static final Map<String, Method> accessorCache = new HashMap<>();
+
+    /** Accesseur de record (RustlingSpot de Tropimon) sinon champ privé (ClientSpot du mod public). */
+    private static Object value(Object target, String name) throws Exception {
+        String key = target.getClass().getName() + "#" + name;
+        Method m = accessorCache.get(key);
+        if (m == null && !accessorCache.containsKey(key)) {
+            try {
+                m = target.getClass().getMethod(name);
+                m.setAccessible(true);
+            } catch (NoSuchMethodException e) {
+                m = null;
+            }
+            accessorCache.put(key, m);
+        }
+        if (m != null) return m.invoke(target);
+        return field(target, name);
     }
 
     /** Lit un champ du ClientSpot du mod (classe package-private, champs privés). */
