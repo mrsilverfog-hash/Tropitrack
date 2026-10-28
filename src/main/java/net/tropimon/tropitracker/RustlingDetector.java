@@ -56,6 +56,13 @@ public class RustlingDetector {
     }
 
     public static void register() {
+        // « cachettedebug » dans le tchat : état de la détection (jamais envoyé au serveur)
+        net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
+            if (!message.trim().equalsIgnoreCase("cachettedebug")) return true;
+            debug(MinecraftClient.getInstance());
+            return false;
+        });
+
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) {
                 spots = new ArrayList<>();
@@ -155,6 +162,32 @@ public class RustlingDetector {
         } catch (Throwable ignored) {
         }
         return ids;
+    }
+
+    private static void debug(MinecraftClient client) {
+        if (client.player == null) return;
+        if (!resolved) {
+            resolved = true;
+            activeSpots = resolveSource();
+        }
+        String source = activeSpots == null ? "§caucune (TropimodClient 0.18 absent ?)"
+            : "§a" + activeSpots.getDeclaringClass().getSimpleName();
+        client.player.sendMessage(Text.literal("§f[Cachettes] source : " + source), false);
+        if (activeSpots == null) return;
+        try {
+            Object result = activeSpots.invoke(null);
+            int n = 0;
+            if (result instanceof Iterable<?> it) for (Object ignored : it) n++;
+            client.player.sendMessage(Text.literal("§f[Cachettes] connues par TropimodClient : §e" + n
+                + "§f — lues par TropiTracker : §e" + spots.size()
+                + (TropiTrackerClient.isPaused() ? " §c(TropiTracker en pause)" : "")), false);
+            for (Spot s : spots) {
+                client.player.sendMessage(Text.literal("§7 - " + s.family() + (s.shiny() ? " shiny" : "") + " à "
+                    + (int) client.player.getPos().distanceTo(s.pos()) + " m"), false);
+            }
+        } catch (Throwable t) {
+            client.player.sendMessage(Text.literal("§c[Cachettes] erreur : " + t), false);
+        }
     }
 
     private static void announce(MinecraftClient client, String family, boolean shiny, int dist) {

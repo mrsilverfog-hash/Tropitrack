@@ -82,11 +82,13 @@ public class ShinyBeamRenderer {
             RenderSystem.lineWidth(6.0f); // contour : ligne noire épaisse dessous
             BufferBuilder outline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
             appendPositionBeams(outline, viewMatrix, hideouts, camPos, playerEyes, 0f, 0f, 0f);
+            appendPillars(outline, viewMatrix, hideouts, camPos, 0f, 0f, 0f);
             drawIfNotEmpty(outline);
 
             RenderSystem.lineWidth(2.5f); // cœur : ligne blanche par-dessus
             BufferBuilder core = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
             appendPositionBeams(core, viewMatrix, hideouts, camPos, playerEyes, 1f, 1f, 1f);
+            appendPillars(core, viewMatrix, hideouts, camPos, 1f, 1f, 1f);
             drawIfNotEmpty(core);
             RenderSystem.lineWidth(2.0f);
         }
@@ -137,6 +139,21 @@ public class ShinyBeamRenderer {
 
             buffer.vertex(viewMatrix, sx, sy, sz).color(r, g, b, ALPHA);
             buffer.vertex(viewMatrix, ex, ey, ez).color(r, g, b, ALPHA);
+        }
+    }
+
+    /**
+     * Colonne verticale au-dessus de chaque cachette (60 blocs) : le faisceau vers le joueur se voit
+     * mal de près (il pointe vers la caméra), la colonne reste visible sous tous les angles.
+     */
+    private static void appendPillars(BufferBuilder buffer, Matrix4f viewMatrix, java.util.List<Vec3d> positions,
+                                      Vec3d camPos, float r, float g, float b) {
+        for (Vec3d target : positions) {
+            float x = (float) (target.x - camPos.x);
+            float z = (float) (target.z - camPos.z);
+            float y0 = (float) (target.y - 0.5 - camPos.y);
+            buffer.vertex(viewMatrix, x, y0, z).color(r, g, b, ALPHA);
+            buffer.vertex(viewMatrix, x, y0 + 60f, z).color(r, g, b, ALPHA);
         }
     }
 
