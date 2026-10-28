@@ -85,17 +85,31 @@ public class ShinyBeamRenderer {
 
         // --- Cachettes (rustling spots) : faisceau blanc à contour noir, lisible sur la neige ---
         if (!hideouts.isEmpty()) {
-            RenderSystem.lineWidth(6.0f); // contour : ligne noire épaisse dessous
-            BufferBuilder outline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-            appendPositionBeams(outline, viewMatrix, shinyHideouts, camPos, playerEyes, 0f, 0f, 0f);
-            appendPillars(outline, viewMatrix, hideouts, camPos, 0f, 0f, 0f);
-            drawIfNotEmpty(outline);
+            // Faisceau vers le joueur (cachettes shiny uniquement) : visible à travers les blocs
+            if (!shinyHideouts.isEmpty()) {
+                RenderSystem.lineWidth(6.0f);
+                BufferBuilder outline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+                appendPositionBeams(outline, viewMatrix, shinyHideouts, camPos, playerEyes, 0f, 0f, 0f);
+                drawIfNotEmpty(outline);
+                RenderSystem.lineWidth(2.5f);
+                BufferBuilder core = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+                appendPositionBeams(core, viewMatrix, shinyHideouts, camPos, playerEyes, 1f, 1f, 1f);
+                drawIfNotEmpty(core);
+            }
 
-            RenderSystem.lineWidth(2.5f); // cœur : ligne blanche par-dessus
-            BufferBuilder core = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-            appendPositionBeams(core, viewMatrix, shinyHideouts, camPos, playerEyes, 1f, 1f, 1f);
-            appendPillars(core, viewMatrix, hideouts, camPos, 1f, 1f, 1f);
-            drawIfNotEmpty(core);
+            // Colonnes : PAS visibles à travers les blocs (comme les faisceaux de ChestTracker),
+            // et plus foncées (gris) au-dessus du premier obstacle
+            RenderSystem.enableDepthTest();
+            java.util.List<RustlingDetector.Spot> spots = RustlingDetector.getSpots();
+            RenderSystem.lineWidth(6.0f);
+            BufferBuilder pillarOutline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            appendPillars(pillarOutline, viewMatrix, spots, camPos, false);
+            drawIfNotEmpty(pillarOutline);
+            RenderSystem.lineWidth(2.5f);
+            BufferBuilder pillarCore = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            appendPillars(pillarCore, viewMatrix, spots, camPos, true);
+            drawIfNotEmpty(pillarCore);
+            RenderSystem.disableDepthTest();
             RenderSystem.lineWidth(2.0f);
         }
 
@@ -152,14 +166,26 @@ public class ShinyBeamRenderer {
      * Colonne verticale au-dessus de chaque cachette (60 blocs) : le faisceau vers le joueur se voit
      * mal de près (il pointe vers la caméra), la colonne reste visible sous tous les angles.
      */
-    private static void appendPillars(BufferBuilder buffer, Matrix4f viewMatrix, java.util.List<Vec3d> positions,
-                                      Vec3d camPos, float r, float g, float b) {
-        for (Vec3d target : positions) {
+    private static void appendPillars(BufferBuilder buffer, Matrix4f viewMatrix, java.util.List<RustlingDetector.Spot> spots,
+                                      Vec3d camPos, boolean core) {
+        float top = RustlingDetector.PILLAR_HEIGHT;
+        for (RustlingDetector.Spot spot : spots) {
+            Vec3d target = spot.pos();
             float x = (float) (target.x - camPos.x);
             float z = (float) (target.z - camPos.z);
             float y0 = (float) (target.y - 0.5 - camPos.y);
-            buffer.vertex(viewMatrix, x, y0, z).color(r, g, b, ALPHA);
-            buffer.vertex(viewMatrix, x, y0 + 60f, z).color(r, g, b, ALPHA);
+            float split = Math.max(0f, Math.min(top, spot.darkFrom()));
+            // Contour : noir sur toute la hauteur. Cœur : blanc jusqu'au premier obstacle, gris au-dessus.
+            float lo = core ? 1f : 0f;
+            float hi = core ? 0.45f : 0f;
+            if (split > 0) {
+                buffer.vertex(viewMatrix, x, y0, z).color(lo, lo, lo, ALPHA);
+                buffer.vertex(viewMatrix, x, y0 + split, z).color(lo, lo, lo, ALPHA);
+            }
+            if (split < top) {
+                buffer.vertex(viewMatrix, x, y0 + split, z).color(hi, hi, hi, ALPHA);
+                buffer.vertex(viewMatrix, x, y0 + top, z).color(hi, hi, hi, ALPHA);
+            }
         }
     }
 

@@ -47,7 +47,20 @@ public class RustlingDetector {
     private static final Set<Object> announcedIds = new HashSet<>();
 
     /** Une cachette visible : centre du bloc, famille traduite, shiny. */
-    public record Spot(Vec3d pos, String family, boolean shiny) {}
+    /** darkFrom = hauteur (depuis le bas du bloc) du premier obstacle au-dessus ; PILLAR_HEIGHT si aucun. */
+    public record Spot(Vec3d pos, String family, boolean shiny, float darkFrom) {}
+
+    public static final int PILLAR_HEIGHT = 60;
+
+    /** Premier bloc non-air au-dessus de la cachette : la colonne devient plus foncée à partir de là. */
+    private static float firstObstacle(net.minecraft.world.World world, BlockPos pos) {
+        BlockPos.Mutable m = new BlockPos.Mutable();
+        for (int h = 1; h < PILLAR_HEIGHT; h++) {
+            m.set(pos.getX(), pos.getY() + h, pos.getZ());
+            if (!world.getBlockState(m).isAir()) return h;
+        }
+        return PILLAR_HEIGHT;
+    }
 
     private static volatile List<Spot> spots = new ArrayList<>();
 
@@ -111,7 +124,7 @@ public class RustlingDetector {
             String family = familyName(familyObj == null ? "" : familyObj.toString());
 
             Vec3d center = new Vec3d(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-            found.add(new Spot(center, family, shiny));
+            found.add(new Spot(center, family, shiny, firstObstacle(client.world, pos)));
 
             Object key = id != null ? id : pos;
             present.add(key);
