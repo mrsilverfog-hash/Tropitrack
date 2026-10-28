@@ -99,8 +99,9 @@ public class RustlingDetector {
         List<Spot> found = new ArrayList<>();
         Set<Object> present = new HashSet<>();
 
-        for (Object spot : raw) {
-            if (spot == null) continue;
+        for (Object entry : raw) {
+            if (entry == null) continue;
+            Object spot = unwrap(entry);
             Object id = value(spot, "id");
             Object posObj = value(spot, "pos");
             if (!(posObj instanceof BlockPos pos)) continue;
@@ -157,7 +158,13 @@ public class RustlingDetector {
             } catch (ClassNotFoundException e) {
                 c = Class.forName(className, true, Thread.currentThread().getContextClassLoader());
             }
-            Method m = c.getMethod(methodName);
+            // Les versions récentes de TropimodClient ont rendu active() non publique
+            Method m;
+            try {
+                m = c.getDeclaredMethod(methodName);
+            } catch (NoSuchMethodException e) {
+                m = c.getMethod(methodName);
+            }
             m.setAccessible(true);
             return m;
         } catch (Throwable t) {
@@ -166,6 +173,12 @@ public class RustlingDetector {
                 .append(t.getMessage() == null ? "" : " (" + t.getMessage() + ")").append(" ; ");
             return null;
         }
+    }
+
+    /** Versions récentes : chaque cachette est enveloppée dans un Patch(spot, surfaceY). */
+    private static Object unwrap(Object entry) throws Exception {
+        Object inner = value(entry, "spot");
+        return inner != null ? inner : entry;
     }
 
     /**
@@ -180,8 +193,8 @@ public class RustlingDetector {
             if (!(result instanceof Iterable<?> iterable)) return ids;
             List<Object> raw = new ArrayList<>();
             for (Object o : iterable) raw.add(o);
-            for (Object spot : raw) {
-                Object rid = value(spot, "radarId");
+            for (Object entry : raw) {
+                Object rid = value(unwrap(entry), "radarId");
                 if (rid instanceof Number n) ids.add(n.intValue());
             }
         } catch (Throwable ignored) {
@@ -266,9 +279,15 @@ public class RustlingDetector {
         if (m == null && !accessorCache.containsKey(key)) {
             try {
                 m = target.getClass().getMethod(name);
-                m.setAccessible(true);
             } catch (NoSuchMethodException e) {
-                m = null;
+                try {
+                    m = target.getClass().getDeclaredMethod(name); // accesseur non public (Patch.spot())
+                } catch (NoSuchMethodException e2) {
+                    m = null;
+                }
+            }
+            if (m != null) {
+                try { m.setAccessible(true); } catch (Throwable ignored) { }
             }
             accessorCache.put(key, m);
         }
