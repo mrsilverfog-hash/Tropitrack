@@ -82,8 +82,9 @@ public class RustlingDetector {
     }
 
     private static void poll(MinecraftClient client) throws Exception {
-        if (!resolved) {
+        if (!resolved || (activeSpots == null && (resolveRetryTicks += POLL_INTERVAL_TICKS) >= 200)) {
             resolved = true;
+            resolveRetryTicks = 0;
             activeSpots = resolveSource();
         }
         if (activeSpots == null) return;
@@ -123,24 +124,48 @@ public class RustlingDetector {
         spots = found;
     }
 
+    // Raison du dernier échec de recherche (affichée par cachettedebug)
+    private static String lastResolveError = "";
+    private static int resolveRetryTicks = 0;
+
     /** Cherche d'abord les cachettes de TropimodClient, puis celles du mod public. */
     private static Method resolveSource() {
-        try {
-            Method m = Class.forName(TROPIMON_CLASS).getMethod("active");
-            m.setAccessible(true);
+        StringBuilder errors = new StringBuilder();
+        Method m = tryResolve(TROPIMON_CLASS, "active", errors);
+        if (m != null) {
             TropiTrackerClient.LOGGER.info("[Cachette] Cachettes Tropimon (TropimodClient) : détection active.");
+            lastResolveError = "";
             return m;
-        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
         }
-        try {
-            Method m = Class.forName(HANDLER_CLASS).getMethod("activeSpots");
-            m.setAccessible(true);
+        m = tryResolve(HANDLER_CLASS, "activeSpots", errors);
+        if (m != null) {
             TropiTrackerClient.LOGGER.info("[Cachette] Mod Rustling Spots : détection active.");
+            lastResolveError = "";
             return m;
-        } catch (ClassNotFoundException | NoSuchMethodException ignored) {
         }
-        TropiTrackerClient.LOGGER.info("[Cachette] Aucune source de cachettes : détection inactive.");
+        lastResolveError = errors.toString();
+        TropiTrackerClient.LOGGER.info("[Cachette] Aucune source de cachettes : {}", lastResolveError);
         return null;
+    }
+
+    private static Method tryResolve(String className, String methodName, StringBuilder errors) {
+        try {
+            // Chargeur de TropiTracker puis chargeur du contexte (au cas où ils diffèrent)
+            Class<?> c;
+            try {
+                c = Class.forName(className, true, RustlingDetector.class.getClassLoader());
+            } catch (ClassNotFoundException e) {
+                c = Class.forName(className, true, Thread.currentThread().getContextClassLoader());
+            }
+            Method m = c.getMethod(methodName);
+            m.setAccessible(true);
+            return m;
+        } catch (Throwable t) {
+            String simple = className.substring(className.lastIndexOf('.') + 1);
+            errors.append(simple).append(" : ").append(t.getClass().getSimpleName())
+                .append(t.getMessage() == null ? "" : " (" + t.getMessage() + ")").append(" ; ");
+            return null;
+        }
     }
 
     /**
@@ -166,14 +191,21 @@ public class RustlingDetector {
 
     private static void debug(MinecraftClient client) {
         if (client.player == null) return;
-        if (!resolved) {
+        if (activeSpots == null) {
             resolved = true;
-            activeSpots = resolveSource();
+            activeSpots = resolveSource(); // nouvelle tentative à chaque commande
         }
-        String source = activeSpots == null ? "§caucune (TropimodClient 0.18 absent ?)"
+        String source = activeSpots == null ? "§caucune"
             : "§a" + activeSpots.getDeclaringClass().getSimpleName();
         client.player.sendMessage(Text.literal("§f[Cachettes] source : " + source), false);
-        if (activeSpots == null) return;
+        if (activeSpots == null) {
+            client.player.sendMessage(Text.literal("§7[Cachettes] raison : " + lastResolveError), false);
+            net.fabricmc.loader.api.FabricLoader.getInstance().getModContainer("tropimodclient").ifPresentOrElse(
+                mod -> client.player.sendMessage(Text.literal("§7[Cachettes] TropimodClient version : "
+                    + mod.getMetadata().getVersion().getFriendlyString()), false),
+                () -> client.player.sendMessage(Text.literal("§7[Cachettes] TropimodClient non chargé"), false));
+            return;
+        }
         try {
             Object result = activeSpots.invoke(null);
             int n = 0;
