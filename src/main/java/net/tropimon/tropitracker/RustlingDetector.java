@@ -238,6 +238,7 @@ public class RustlingDetector {
     private static void announce(MinecraftClient client, String family, boolean shiny, int dist) {
         TropiTrackerClient.LOGGER.info("[Cachette] Cachette {} détectée à {} m (shiny={})", family, dist, shiny);
         if (TropiTrackerClient.isPaused()) return; // pause : marquée comme vue, aucune alerte
+        if (!shiny) return; // cachette normale : seulement la colonne, ni titre, ni message, ni son
         client.execute(() -> {
             if (client.player == null) return;
             String title = shiny ? "§f✨ Cachette shiny détectée ✨" : "§fCachette détectée";

@@ -46,7 +46,13 @@ public class ShinyBeamRenderer {
         Set<PokemonEntity> tracked = TropiTrackerClient.getActiveTrackedEntities();
         java.util.List<Vec3d> farHunt = RadarDetector.getFarHuntPositions();
         java.util.List<Vec3d> hideouts = new java.util.ArrayList<>();
-        for (RustlingDetector.Spot spot : RustlingDetector.getSpots()) hideouts.add(spot.pos());
+        // Toutes les cachettes ont la colonne ; seules les shiny ont en plus le faisceau vers le
+        // joueur et la distance affichée
+        java.util.List<Vec3d> shinyHideouts = new java.util.ArrayList<>();
+        for (RustlingDetector.Spot spot : RustlingDetector.getSpots()) {
+            hideouts.add(spot.pos());
+            if (spot.shiny()) shinyHideouts.add(spot.pos());
+        }
         if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
                 && hideouts.isEmpty()) return;
 
@@ -81,13 +87,13 @@ public class ShinyBeamRenderer {
         if (!hideouts.isEmpty()) {
             RenderSystem.lineWidth(6.0f); // contour : ligne noire épaisse dessous
             BufferBuilder outline = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-            appendPositionBeams(outline, viewMatrix, hideouts, camPos, playerEyes, 0f, 0f, 0f);
+            appendPositionBeams(outline, viewMatrix, shinyHideouts, camPos, playerEyes, 0f, 0f, 0f);
             appendPillars(outline, viewMatrix, hideouts, camPos, 0f, 0f, 0f);
             drawIfNotEmpty(outline);
 
             RenderSystem.lineWidth(2.5f); // cœur : ligne blanche par-dessus
             BufferBuilder core = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-            appendPositionBeams(core, viewMatrix, hideouts, camPos, playerEyes, 1f, 1f, 1f);
+            appendPositionBeams(core, viewMatrix, shinyHideouts, camPos, playerEyes, 1f, 1f, 1f);
             appendPillars(core, viewMatrix, hideouts, camPos, 1f, 1f, 1f);
             drawIfNotEmpty(core);
             RenderSystem.lineWidth(2.0f);
@@ -99,7 +105,7 @@ public class ShinyBeamRenderer {
         drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "\u2728", SHINY_TEXT_COLOR, 24);
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 36);
         drawPositionLabels(context, client, camera, camPos, playerEyes, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 48);
-        drawOutlinedLabels(context, client, camera, camPos, playerEyes, hideouts, "\uD83C\uDF3F", 60);
+        drawOutlinedLabels(context, client, camera, camPos, playerEyes, shinyHideouts, "\uD83C\uDF3F", 60);
 
         RenderSystem.enableDepthTest();
         RenderSystem.enableCull();
