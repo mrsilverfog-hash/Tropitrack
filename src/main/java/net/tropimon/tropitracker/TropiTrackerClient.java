@@ -380,7 +380,7 @@ public class TropiTrackerClient implements ClientModInitializer {
             boolean on = AutoCapture.toggle(species);
             client.player.sendMessage(Text.literal(on
                 ? "§aTropiTracker : §fcapture auto §aactivée §fpour §e" + capitalize(species)
-                    + " §7(Poké Balls de la hotbar, 10 blocs). Retape la commande pour arrêter."
+                    + " §7(Poké Balls de la hotbar, 8 blocs max). Retape la commande pour arrêter."
                     + autoListSuffix()
                 : "§cTropiTracker : §fcapture auto §cdésactivée §fpour §e" + capitalize(species) + autoListSuffix()), false);
             return;
