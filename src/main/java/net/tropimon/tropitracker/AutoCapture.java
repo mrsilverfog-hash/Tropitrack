@@ -78,12 +78,20 @@ public final class AutoCapture {
             marked = java.util.List.of();
             return;
         }
+        ClientPlayerEntity player = client.player;
+        if (player == null) {
+            marked = java.util.List.of();
+            return;
+        }
         java.util.List<PokemonEntity> list = new java.util.ArrayList<>();
         for (Entity e : client.world.getEntities()) {
             if (!(e instanceof PokemonEntity pe) || pe.isRemoved()) continue;
             if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
             if (pe.getBattleId() != null) continue;
             if (!matches(pe)) continue;
+            // Cible seulement sur ceux que la capture auto peut viser : à portée et en vue
+            if (player.squaredDistanceTo(pe) > RANGE * RANGE) continue;
+            if (!player.canSee(pe)) continue;
             list.add(pe);
         }
         marked = list;
@@ -117,7 +125,7 @@ public final class AutoCapture {
     // ------------------------------------------------------------------
 
     private static void onTick(MinecraftClient client) {
-        if (++markTick >= 10) {   // liste des cibles rafraîchie toutes les 0,5 s
+        if (++markTick >= 5) {    // liste des cibles rafraîchie toutes les 0,25 s
             markTick = 0;
             refreshMarked(client);
         }
