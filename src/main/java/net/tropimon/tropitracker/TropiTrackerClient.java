@@ -156,6 +156,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         CatchDetector.register();
         RadarDetector.register();
         RustlingDetector.register();
+        AutoCapture.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;
@@ -370,6 +371,22 @@ public class TropiTrackerClient implements ClientModInitializer {
     private void handleTrackCommand(String name) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
+
+        // « track <nom> auto » : active / coupe la capture automatique pour cette espèce
+        if (name.endsWith(" auto")) {
+            String species = name.substring(0, name.length() - 5).trim();
+            if (species.isEmpty()) return;
+            trackedPokemons.add(species);
+            boolean on = AutoCapture.toggle(species);
+            client.player.sendMessage(Text.literal(on
+                ? "§aTropiTracker : §fcapture auto §aactivée §fpour §e" + capitalize(species)
+                    + " §7(Poké Balls de la hotbar, 24 blocs). Retape la commande pour arrêter."
+                : "§cTropiTracker : §fcapture auto §cdésactivée §fpour §e" + capitalize(species)), false);
+            return;
+        }
+        if (AutoCapture.isActiveFor(name)) {
+            AutoCapture.stop(); // retirer le Pokémon du suivi arrête aussi la capture auto
+        }
 
         if (trackedPokemons.contains(name)) {
             trackedPokemons.remove(name);
