@@ -380,12 +380,13 @@ public class TropiTrackerClient implements ClientModInitializer {
             boolean on = AutoCapture.toggle(species);
             client.player.sendMessage(Text.literal(on
                 ? "§aTropiTracker : §fcapture auto §aactivée §fpour §e" + capitalize(species)
-                    + " §7(Poké Balls de la hotbar, 24 blocs). Retape la commande pour arrêter."
-                : "§cTropiTracker : §fcapture auto §cdésactivée §fpour §e" + capitalize(species)), false);
+                    + " §7(Poké Balls de la hotbar, 10 blocs). Retape la commande pour arrêter."
+                    + autoListSuffix()
+                : "§cTropiTracker : §fcapture auto §cdésactivée §fpour §e" + capitalize(species) + autoListSuffix()), false);
             return;
         }
         if (AutoCapture.isActiveFor(name)) {
-            AutoCapture.stop(); // retirer le Pokémon du suivi arrête aussi la capture auto
+            AutoCapture.stop(name); // retirer le Pokémon du suivi arrête aussi la capture auto
         }
 
         if (trackedPokemons.contains(name)) {
@@ -461,6 +462,16 @@ public class TropiTrackerClient implements ClientModInitializer {
             return boardSpeciesCanonical.iterator().next();
         }
         return null;
+    }
+
+    /** « En capture auto : Pikachu, Évoli » (rien si aucune espèce). */
+    private static String autoListSuffix() {
+        java.util.Set<String> t = AutoCapture.getTargets();
+        if (t.isEmpty()) return "";
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (String n : t) names.add(capitalize(n));
+        java.util.Collections.sort(names);
+        return "\n§7En capture auto : §e" + String.join("§7, §e", names);
     }
 
     private static boolean isTracked(String frLower, String speciesName) {

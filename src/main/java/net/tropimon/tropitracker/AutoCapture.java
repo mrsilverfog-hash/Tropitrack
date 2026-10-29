@@ -21,8 +21,9 @@ import java.util.UUID;
 /**
  * Capture automatique : activée UNIQUEMENT par « track <nom> auto » (même commande pour arrêter).
  *
+ * Plusieurs espèces peuvent être en capture auto en même temps (une commande par espèce).
  * Tant qu'elle est active, toutes les 0,3 s (6 s avant de reviser un même Pokémon), TropiTracker cherche le Pokémon sauvage de l'espèce
- * choisie le plus proche (≤ 24 blocs, visible, hors combat, pas déjà visé), vise en tenant compte de
+ * choisie le plus proche (≤ 10 blocs, visible, hors combat, pas déjà visé), vise en tenant compte de
  * la retombée de la Poké Ball, et lance une balle de la hotbar. Avec 50 Pokémon de l'espèce autour,
  * il enchaîne donc 50 lancers, un par Pokémon.
  *
@@ -32,19 +33,20 @@ import java.util.UUID;
  *  - vitesse initiale = throwPower de la balle (1,25 par défaut) ;
  *  - trajectoire de projectile Minecraft : à chaque tick, position += vitesse ; vitesse × 0,99 ;
  *    vitesse.y -= 0,03.
- * On cherche par dichotomie l'angle qui passe par le centre du Pokémon.
+ * La balle hérite du déplacement du joueur (marche, course, saut) et la cible est anticipée :
+ * le calcul cherche la durée de vol pour laquelle la balle et le Pokémon se rejoignent.
  * La touche pause « * » suspend aussi les lancers.
  */
 public final class AutoCapture {
 
-    private static final double RANGE = 24.0;
+    private static final double RANGE = 10.0;   // lancer seulement à 10 blocs maximum
     private static final int THROW_INTERVAL_TICKS = 6;   // 0,3 s entre deux Pokémon différents
     private static final long RETARGET_COOLDOWN_MS = 6000;  // 6 s avant de relancer sur le même Pokémon
     private static final double GRAVITY = 0.03;
     private static final double DRAG = 0.99;
 
-    /** Nom (en minuscules, français ou anglais) de l'espèce visée ; null = capture auto inactive. */
-    private static String target = null;
+    /** Noms (en minuscules, français ou anglais) des espèces visées ; vide = capture auto inactive. */
+    private static final java.util.Set<String> targets = java.util.concurrent.ConcurrentHashMap.newKeySet();
     private static int tick = 0;
     private static final Map<UUID, Long> recentlyThrownAt = new HashMap<>();
     private static boolean noBallWarned = false;
@@ -56,11 +58,11 @@ public final class AutoCapture {
     }
 
     public static boolean isActiveFor(String nameLower) {
-        return target != null && target.equals(nameLower);
+        return targets.contains(nameLower);
     }
 
     public static boolean isActive() {
-        return target != null;
+        return !targets.isEmpty();
     }
 
     /** Pokémon sauvages de l'espèce en capture auto, chargés côté client : ils reçoivent la petite cible. */
@@ -68,11 +70,11 @@ public final class AutoCapture {
     private static int markTick = 0;
 
     public static java.util.List<PokemonEntity> getMarked() {
-        return target == null ? java.util.List.of() : marked;
+        return targets.isEmpty() ? java.util.List.of() : marked;
     }
 
     private static void refreshMarked(MinecraftClient client) {
-        if (target == null || client.world == null) {
+        if (targets.isEmpty() || client.world == null) {
             marked = java.util.List.of();
             return;
         }
@@ -87,21 +89,29 @@ public final class AutoCapture {
         marked = list;
     }
 
-    /** Bascule la capture auto pour cette espèce. Renvoie true si elle vient d'être activée. */
+    /** Bascule la capture auto pour cette espèce (plusieurs espèces possibles). Renvoie true si elle vient d'être activée. */
     public static boolean toggle(String nameLower) {
-        if (nameLower.equals(target)) {
-            target = null;
-            return false;
+        if (targets.remove(nameLower)) return false;
+        if (targets.isEmpty()) {
+            recentlyThrownAt.clear();
+            tick = THROW_INTERVAL_TICKS;
         }
-        target = nameLower;
-        recentlyThrownAt.clear();
+        targets.add(nameLower);
         noBallWarned = false;
-        tick = THROW_INTERVAL_TICKS;
         return true;
     }
 
-    public static void stop() {
-        target = null;
+    /** Arrête la capture auto pour cette espèce seulement. */
+    public static void stop(String nameLower) {
+        targets.remove(nameLower);
+    }
+
+    public static void stopAll() {
+        targets.clear();
+    }
+
+    public static java.util.Set<String> getTargets() {
+        return java.util.Collections.unmodifiableSet(targets);
     }
 
     // ------------------------------------------------------------------
@@ -111,7 +121,7 @@ public final class AutoCapture {
             markTick = 0;
             refreshMarked(client);
         }
-        if (target == null) return;
+        if (targets.isEmpty()) return;
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null || client.interactionManager == null) return;
         if (client.currentScreen != null) return;            // pas pendant un menu
@@ -151,14 +161,21 @@ public final class AutoCapture {
         player.getInventory().selectedSlot = slot;
         float power = throwPower(player.getInventory().getStack(slot));
 
-        Vec3d eye = player.getEyePos();
+        // Visée en mouvement : la balle hérite de la vitesse du joueur (Minecraft ajoute le
+        // déplacement du lanceur, sans la composante verticale s'il est au sol), et la cible
+        // est anticipée selon son propre déplacement.
+        Vec3d start = player.getEyePos().subtract(0, 0.1, 0);
+        Vec3d shooterVel = new Vec3d(player.getX() - player.prevX,
+                player.isOnGround() ? 0 : player.getY() - player.prevY,
+                player.getZ() - player.prevZ);
+        Vec3d targetVel = new Vec3d(best.getX() - best.prevX, best.getY() - best.prevY, best.getZ() - best.prevZ);
+        if (targetVel.lengthSquared() > 1.0) targetVel = Vec3d.ZERO; // téléportation : on ignore
         Vec3d aimPoint = best.getPos().add(0, best.getHeight() * 0.5, 0);
-        Vec3d delta = aimPoint.subtract(eye);
-        double horizontal = Math.sqrt(delta.x * delta.x + delta.z * delta.z);
+        Vec3d launchDir = solveMovingShot(start, shooterVel, aimPoint, targetVel, power);
+        if (launchDir == null) return; // hors de portée de lancer
 
-        float yaw = (float) (MathHelper.atan2(delta.z, delta.x) * 180.0 / Math.PI) - 90.0f;
-        Float launchPitch = solveLaunchPitch(horizontal, delta.y, power);
-        if (launchPitch == null) return; // hors de portée de lancer
+        float yaw = (float) Math.toDegrees(Math.atan2(-launchDir.x, launchDir.z));
+        float launchPitch = (float) -Math.toDegrees(Math.asin(MathHelper.clamp(launchDir.y, -1.0, 1.0)));
         float playerPitch = toPlayerPitch(launchPitch);
 
         float oldYaw = player.getYaw();
@@ -176,10 +193,10 @@ public final class AutoCapture {
 
     private static boolean matches(PokemonEntity pe) {
         String species = pe.getPokemon().getSpecies().getName().toLowerCase(Locale.ROOT);
-        if (species.equals(target)) return true;
+        if (targets.contains(species)) return true;
         String key = "cobblemon.species." + species + ".name";
         String fr = net.minecraft.client.resource.language.I18n.translate(key).toLowerCase(Locale.ROOT);
-        return fr.equals(target);
+        return targets.contains(fr);
     }
 
     /** Premier emplacement de la hotbar contenant une Poké Ball (PokeBallItem de Cobblemon). */
@@ -210,41 +227,43 @@ public final class AutoCapture {
     }
 
     /**
-     * Angle de lancer (convention Minecraft : négatif = vers le haut) pour atteindre un point situé à
-     * `horizontal` blocs et `dy` blocs plus haut. Dichotomie sur la hauteur atteinte, en ne gardant
-     * que le tir tendu (le plus direct). null si la cible est hors de portée.
+     * Direction de lancer (vecteur unitaire) pour toucher une cible mobile depuis un joueur mobile.
+     *
+     * Trajectoire Minecraft (par tick : position += vitesse ; vitesse × 0,99 ; vitesse.y -= 0,03) :
+     * après n ticks, déplacement = v0·S(n) - (0, G·(n - S(n))/(1 - D), 0) avec S(n) = (1 - Dⁿ)/(1 - D).
+     * Pour chaque durée de vol n, on en déduit la vitesse initiale nécessaire w(n) ; la part due au
+     * lancer est w(n) - vitesse du joueur, et doit valoir exactement la puissance de la balle.
+     * On garde la plus petite durée qui convient (tir tendu). null si impossible.
      */
-    private static Float solveLaunchPitch(double horizontal, double dy, float power) {
-        double lo = -60, hi = 60; // degrés : -60 = vers le haut, 60 = vers le bas
-        // Le tir le plus haut (lo) doit passer au-dessus de la cible, sinon hors de portée
-        if (heightAt(horizontal, lo, power) < dy) return null;
-        for (int i = 0; i < 40; i++) {
-            double mid = (lo + hi) / 2;
-            if (heightAt(horizontal, mid, power) >= dy) lo = mid; else hi = mid;
+    private static Vec3d solveMovingShot(Vec3d start, Vec3d shooterVel, Vec3d target, Vec3d targetVel, float power) {
+        double prevN = -1, prevF = 0;
+        for (double n = 0.25; n <= 120; n += 0.25) {
+            double f = excess(n, start, shooterVel, target, targetVel, power);
+            if (prevN > 0 && prevF > 0 && f <= 0) {
+                double lo = prevN, hi = n;
+                for (int i = 0; i < 30; i++) {
+                    double mid = (lo + hi) / 2;
+                    if (excess(mid, start, shooterVel, target, targetVel, power) > 0) lo = mid; else hi = mid;
+                }
+                Vec3d launch = requiredVelocity(hi, start, target, targetVel).subtract(shooterVel);
+                return launch.lengthSquared() < 1e-8 ? null : launch.normalize();
+            }
+            prevN = n;
+            prevF = f;
         }
-        return (float) lo;
+        return null;
     }
 
-    /** Hauteur de la balle quand elle a parcouru `horizontal` blocs, pour un angle donné. */
-    private static double heightAt(double horizontal, double pitchDeg, float power) {
-        double rad = Math.toRadians(pitchDeg);
-        double vx = Math.cos(rad) * power;
-        double vy = -Math.sin(rad) * power;
-        double x = 0, y = 0;
-        for (int t = 0; t < 200; t++) {
-            double nx = x + vx;
-            double ny = y + vy;
-            if (nx >= horizontal) {
-                double f = (horizontal - x) / (nx - x);
-                return y + (ny - y) * f;
-            }
-            x = nx;
-            y = ny;
-            vx *= DRAG;
-            vy = vy * DRAG - GRAVITY;
-            if (vx < 1e-4) break;
-        }
-        return Double.NEGATIVE_INFINITY;
+    private static double excess(double n, Vec3d start, Vec3d shooterVel, Vec3d target, Vec3d targetVel, float power) {
+        return requiredVelocity(n, start, target, targetVel).subtract(shooterVel).length() - power;
+    }
+
+    /** Vitesse initiale totale pour être sur la cible (anticipée) au bout de n ticks. */
+    private static Vec3d requiredVelocity(double n, Vec3d start, Vec3d target, Vec3d targetVel) {
+        double s = (1 - Math.pow(DRAG, n)) / (1 - DRAG);
+        double drop = GRAVITY * (n - s) / (1 - DRAG);
+        Vec3d aim = target.add(targetVel.multiply(n)).subtract(start);
+        return new Vec3d(aim.x / s, (aim.y + drop) / s, aim.z / s);
     }
 
     /** Inverse du décalage de Cobblemon : angle réel = pitch joueur - (5° ou 5°·cos(pitch) si pitch < 0). */
