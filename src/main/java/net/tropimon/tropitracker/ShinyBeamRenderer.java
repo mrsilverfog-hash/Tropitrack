@@ -53,8 +53,9 @@ public class ShinyBeamRenderer {
             hideouts.add(spot.pos());
             if (spot.shiny()) shinyHideouts.add(spot.pos());
         }
+        java.util.List<PokemonEntity> autoTargets = AutoCapture.getMarked();
         if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
-                && hideouts.isEmpty()) return;
+                && hideouts.isEmpty() && autoTargets.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -82,6 +83,15 @@ public class ShinyBeamRenderer {
         appendPositionBeams(buffer, viewMatrix, farHunt, camPos, playerEyes, TRACKED_R, TRACKED_G, TRACKED_B);
 
         drawIfNotEmpty(buffer);
+
+        // --- Capture auto : petite cible rouge sur chaque Pokémon visé (pas de faisceau) ---
+        if (!autoTargets.isEmpty()) {
+            RenderSystem.lineWidth(2.5f);
+            BufferBuilder reticle = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            appendReticles(reticle, viewMatrix, autoTargets, camera, camPos, tickDelta);
+            drawIfNotEmpty(reticle);
+            RenderSystem.lineWidth(2.0f);
+        }
 
         // --- Cachettes (rustling spots) : faisceau blanc à contour noir, lisible sur la neige ---
         if (!hideouts.isEmpty()) {
@@ -136,6 +146,38 @@ public class ShinyBeamRenderer {
         BuiltBuffer built = buffer.endNullable();
         if (built != null) {
             BufferRenderer.drawWithGlobalProgram(built);
+        }
+    }
+
+    /** Petit réticule (cercle + 4 traits) face à la caméra, centré sur le Pokémon. */
+    private static void appendReticles(BufferBuilder buffer, Matrix4f viewMatrix, java.util.List<PokemonEntity> entities,
+                                       Camera camera, Vec3d camPos, float tickDelta) {
+        // Deux axes perpendiculaires au regard, calculés depuis l'orientation de la caméra
+        double yaw = Math.toRadians(camera.getYaw()), pitch = Math.toRadians(camera.getPitch());
+        Vec3d fwd = new Vec3d(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+        Vec3d l = new Vec3d(Math.cos(yaw), 0, Math.sin(yaw)).normalize();
+        Vec3d u = l.crossProduct(fwd).normalize();
+        final float r = 1.0f, g = 0.15f, b = 0.15f;
+        final int SEG = 20;
+        for (PokemonEntity pe : entities) {
+            if (pe == null || pe.isRemoved()) continue;
+            Vec3d c = pe.getLerpedPos(tickDelta).add(0, pe.getHeight() / 2.0, 0).subtract(camPos);
+            double rad = Math.max(0.25, Math.min(0.6, Math.max(pe.getWidth(), pe.getHeight()) * 0.35));
+            for (int i = 0; i < SEG; i++) {
+                double a0 = 2 * Math.PI * i / SEG, a1 = 2 * Math.PI * (i + 1) / SEG;
+                Vec3d p0 = c.add(l.multiply(Math.cos(a0) * rad)).add(u.multiply(Math.sin(a0) * rad));
+                Vec3d p1 = c.add(l.multiply(Math.cos(a1) * rad)).add(u.multiply(Math.sin(a1) * rad));
+                buffer.vertex(viewMatrix, (float) p0.x, (float) p0.y, (float) p0.z).color(r, g, b, ALPHA);
+                buffer.vertex(viewMatrix, (float) p1.x, (float) p1.y, (float) p1.z).color(r, g, b, ALPHA);
+            }
+            // 4 traits qui débordent du cercle, comme un viseur
+            Vec3d[] dirs = { l, l.multiply(-1), u, u.multiply(-1) };
+            for (Vec3d d : dirs) {
+                Vec3d in = c.add(d.multiply(rad * 0.55));
+                Vec3d out = c.add(d.multiply(rad * 1.35));
+                buffer.vertex(viewMatrix, (float) in.x, (float) in.y, (float) in.z).color(r, g, b, ALPHA);
+                buffer.vertex(viewMatrix, (float) out.x, (float) out.y, (float) out.z).color(r, g, b, ALPHA);
+            }
         }
     }
 

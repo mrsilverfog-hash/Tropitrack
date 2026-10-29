@@ -117,6 +117,8 @@ public class RadarDetector {
             boolean shiny = iconId.contains("shiny");
             boolean hunt = !shiny && iconId.equals("hunt");
             if (!shiny && !hunt) continue;
+            // Capture auto en cours : pas d'alerte ni de faisceau pour les Pokémon de la chasse
+            if (hunt && AutoCapture.isActive()) continue;
 
             int id = ((Number) call(blip, "entityId")).intValue();
             if (spotIds.contains(id)) continue;

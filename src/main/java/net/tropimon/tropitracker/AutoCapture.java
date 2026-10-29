@@ -59,6 +59,34 @@ public final class AutoCapture {
         return target != null && target.equals(nameLower);
     }
 
+    public static boolean isActive() {
+        return target != null;
+    }
+
+    /** Pokémon sauvages de l'espèce en capture auto, chargés côté client : ils reçoivent la petite cible. */
+    private static volatile java.util.List<PokemonEntity> marked = java.util.List.of();
+    private static int markTick = 0;
+
+    public static java.util.List<PokemonEntity> getMarked() {
+        return target == null ? java.util.List.of() : marked;
+    }
+
+    private static void refreshMarked(MinecraftClient client) {
+        if (target == null || client.world == null) {
+            marked = java.util.List.of();
+            return;
+        }
+        java.util.List<PokemonEntity> list = new java.util.ArrayList<>();
+        for (Entity e : client.world.getEntities()) {
+            if (!(e instanceof PokemonEntity pe) || pe.isRemoved()) continue;
+            if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
+            if (pe.getBattleId() != null) continue;
+            if (!matches(pe)) continue;
+            list.add(pe);
+        }
+        marked = list;
+    }
+
     /** Bascule la capture auto pour cette espèce. Renvoie true si elle vient d'être activée. */
     public static boolean toggle(String nameLower) {
         if (nameLower.equals(target)) {
@@ -79,6 +107,10 @@ public final class AutoCapture {
     // ------------------------------------------------------------------
 
     private static void onTick(MinecraftClient client) {
+        if (++markTick >= 10) {   // liste des cibles rafraîchie toutes les 0,5 s
+            markTick = 0;
+            refreshMarked(client);
+        }
         if (target == null) return;
         ClientPlayerEntity player = client.player;
         if (player == null || client.world == null || client.interactionManager == null) return;

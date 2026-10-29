@@ -464,6 +464,8 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private static boolean isTracked(String frLower, String speciesName) {
+        // Espèce en capture auto : ni message, ni son, ni faisceau (juste la petite cible)
+        if (AutoCapture.isActiveFor(frLower) || AutoCapture.isActiveFor(speciesName)) return false;
         return trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName)
             || boardTrackedPokemons.contains(frLower) || boardTrackedPokemons.contains(speciesName);
     }
