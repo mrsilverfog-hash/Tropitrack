@@ -21,7 +21,7 @@ import java.util.UUID;
 /**
  * Capture automatique : activée UNIQUEMENT par « track <nom> auto » (même commande pour arrêter).
  *
- * Tant qu'elle est active, toutes les 10 ticks, TropiTracker cherche le Pokémon sauvage de l'espèce
+ * Tant qu'elle est active, toutes les 6 secondes, TropiTracker cherche le Pokémon sauvage de l'espèce
  * choisie le plus proche (≤ 24 blocs, visible, hors combat, pas déjà visé), vise en tenant compte de
  * la retombée de la Poké Ball, et lance une balle de la hotbar. Avec 50 Pokémon de l'espèce autour,
  * il enchaîne donc 50 lancers, un par Pokémon.
@@ -38,7 +38,7 @@ import java.util.UUID;
 public final class AutoCapture {
 
     private static final double RANGE = 24.0;
-    private static final int THROW_INTERVAL_TICKS = 10;
+    private static final int THROW_INTERVAL_TICKS = 120; // 6 secondes entre deux lancers
     private static final long RETARGET_COOLDOWN_MS = 4000;  // laisse le temps à la capture de se jouer
     private static final double GRAVITY = 0.03;
     private static final double DRAG = 0.99;
