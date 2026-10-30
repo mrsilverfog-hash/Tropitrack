@@ -45,12 +45,15 @@ public class RadarDetector {
     private static volatile List<Vec3d> farShinyPositions = new ArrayList<>();
     // Pokémon de la chasse (icône « hunt ») repérés au radar mais pas encore chargés
     private static volatile List<Vec3d> farHuntPositions = new ArrayList<>();
+    /** Barons repérés au radar (icône rouge « alpha ») : identifiant d'entité -> position du blip. */
+    private static volatile Map<Integer, Vec3d> baronBlips = new HashMap<>();
 
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) {
                 farShinyPositions = new ArrayList<>();
                 farHuntPositions = new ArrayList<>();
+                baronBlips = new HashMap<>();
                 return;
             }
             if (++tick < POLL_INTERVAL_TICKS) return;
@@ -79,6 +82,11 @@ public class RadarDetector {
         return farHuntPositions;
     }
 
+    /** Barons du radar (icône rouge) : juste un symbole rouge, ni alerte ni faisceau. */
+    public static Map<Integer, Vec3d> getBaronBlips() {
+        return baronBlips;
+    }
+
     private static void poll(MinecraftClient client) throws Exception {
         if (!resolved) {
             resolved = true;
@@ -98,6 +106,7 @@ public class RadarDetector {
         if (data == null) {
             farShinyPositions = new ArrayList<>();
             farHuntPositions = new ArrayList<>();
+            baronBlips = new HashMap<>();
             return;
         }
 
@@ -109,11 +118,20 @@ public class RadarDetector {
         Set<Integer> stillPresent = new HashSet<>();
         // Les cachettes shiny apparaissent aussi au radar : elles ont leur propre alerte et faisceau
         Set<Integer> spotIds = RustlingDetector.currentRadarIds();
+        Map<Integer, Vec3d> barons = new HashMap<>();
 
         for (Object blip : blips) {
             if (blip == null) continue;
             Object icon = call(blip, "icon");
             String iconId = icon == null ? "" : String.valueOf(call(icon, "id"));
+            // Icône rouge « alpha » (et ses variantes legendary_alpha, shiny_alpha...) = baron
+            if (iconId.contains("alpha")) {
+                int bid = ((Number) call(blip, "entityId")).intValue();
+                if (!spotIds.contains(bid)) {
+                    barons.put(bid, new Vec3d(((Number) call(blip, "x")).intValue() + 0.5,
+                        ((Number) call(blip, "y")).intValue(), ((Number) call(blip, "z")).intValue() + 0.5));
+                }
+            }
             boolean shiny = iconId.contains("shiny");
             boolean hunt = !shiny && iconId.equals("hunt");
             if (!shiny && !hunt) continue;
@@ -156,6 +174,7 @@ public class RadarDetector {
         alertedIds.retainAll(unionWithLoaded(client, stillPresent));
         farShinyPositions = far;
         farHuntPositions = farHunt;
+        baronBlips = barons;
     }
 
     /**

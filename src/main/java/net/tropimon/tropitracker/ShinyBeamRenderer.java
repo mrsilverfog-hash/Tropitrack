@@ -54,6 +54,8 @@ public class ShinyBeamRenderer {
             if (spot.shiny()) shinyHideouts.add(spot.pos());
         }
         java.util.List<PokemonEntity> autoTargets = AutoCapture.getMarked();
+        java.util.Map<Integer, Vec3d> baronBlips = RadarDetector.getBaronBlips();
+        if (!baronBlips.isEmpty()) renderBaronMarkers(context, client, baronBlips);
         if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
                 && hideouts.isEmpty() && autoTargets.isEmpty()) return;
 
@@ -147,6 +149,63 @@ public class ShinyBeamRenderer {
         if (built != null) {
             BufferRenderer.drawWithGlobalProgram(built);
         }
+    }
+
+    /**
+     * Barons du radar : losange rouge à contour noir au-dessus du Pokémon (ou de la position du blip
+     * s'il n'est pas encore chargé), visible à travers les blocs, taille constante à l'écran.
+     */
+    private static void renderBaronMarkers(WorldRenderContext context, MinecraftClient client,
+                                           java.util.Map<Integer, Vec3d> blips) {
+        Camera camera = context.camera();
+        Vec3d camPos = camera.getPos();
+        float tickDelta = context.tickCounter().getTickDelta(true);
+        Matrix4f viewMatrix = context.matrixStack().peek().getPositionMatrix();
+
+        double yaw = Math.toRadians(camera.getYaw()), pitch = Math.toRadians(camera.getPitch());
+        Vec3d fwd = new Vec3d(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+        Vec3d l = new Vec3d(Math.cos(yaw), 0, Math.sin(yaw)).normalize();
+        Vec3d u = l.crossProduct(fwd).normalize();
+
+        RenderSystem.setShader(GameRenderer::getPositionColorProgram);
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.depthMask(false);
+        RenderSystem.disableCull();
+        RenderSystem.disableDepthTest();
+
+        BufferBuilder buf = Tessellator.getInstance().begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
+        for (java.util.Map.Entry<Integer, Vec3d> e : blips.entrySet()) {
+            net.minecraft.entity.Entity ent = client.world.getEntityById(e.getKey());
+            Vec3d top;
+            if (ent != null && !ent.isRemoved()) {
+                top = ent.getLerpedPos(tickDelta).add(0, ent.getHeight() + 0.6, 0);
+            } else {
+                top = e.getValue().add(0, 1.6, 0);
+            }
+            Vec3d c = top.subtract(camPos);
+            double size = 0.18 + c.length() * 0.018;   // garde à peu près la même taille à l'écran
+            appendDiamond(buf, viewMatrix, c, l, u, size * 1.35, 0f, 0f, 0f);        // contour noir
+            appendDiamond(buf, viewMatrix, c.subtract(fwd.multiply(0.01)), l, u, size, 1f, 0.1f, 0.1f); // cœur rouge
+        }
+        drawIfNotEmpty(buf);
+
+        RenderSystem.enableDepthTest();
+        RenderSystem.enableCull();
+        RenderSystem.depthMask(true);
+        RenderSystem.disableBlend();
+    }
+
+    private static void appendDiamond(BufferBuilder buf, Matrix4f m, Vec3d c, Vec3d l, Vec3d u, double r,
+                                      float cr, float cg, float cb) {
+        Vec3d top = c.add(u.multiply(r)), bottom = c.subtract(u.multiply(r));
+        Vec3d left = c.add(l.multiply(r * 0.75)), right = c.subtract(l.multiply(r * 0.75));
+        vtx(buf, m, top, cr, cg, cb); vtx(buf, m, left, cr, cg, cb); vtx(buf, m, right, cr, cg, cb);
+        vtx(buf, m, bottom, cr, cg, cb); vtx(buf, m, right, cr, cg, cb); vtx(buf, m, left, cr, cg, cb);
+    }
+
+    private static void vtx(BufferBuilder buf, Matrix4f m, Vec3d p, float r, float g, float b) {
+        buf.vertex(m, (float) p.x, (float) p.y, (float) p.z).color(r, g, b, 1f);
     }
 
     /** Petit réticule (cercle + 4 traits) face à la caméra, centré sur le Pokémon. */
