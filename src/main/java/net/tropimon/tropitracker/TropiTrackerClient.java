@@ -62,7 +62,7 @@ public class TropiTrackerClient implements ClientModInitializer {
     public static boolean enableUltraBeast = true;
     public static boolean enableParadox    = true;
     public static boolean enableShiny      = true;
-    public static boolean enableBaron      = true;
+    public static boolean enableBaron      = false; // scan baron retiré
 
     /**
      * Motif recherché dans le nom affiché du Pokémon. Tropimon nomme ces spawns
@@ -359,10 +359,6 @@ public class TropiTrackerClient implements ClientModInitializer {
         });
 
         net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents.ALLOW_CHAT.register(message -> {
-            if (message.trim().equalsIgnoreCase("barondebug")) {
-                dumpNearbyNames();
-                return false;
-            }
             if (message.toLowerCase().startsWith("track ")) {
                 String pokemonName = message.substring(6).trim().toLowerCase();
                 handleTrackCommand(pokemonName);
@@ -511,20 +507,8 @@ public class TropiTrackerClient implements ClientModInitializer {
      * testés, un seul suffit à déclencher l'alerte.
      */
     public static boolean isBaron(PokemonEntity pe) {
-        if (!enableBaron || pe == null) return false;
-
-        // Source réelle du libellé sur Tropimon : le « titled name » de
-        // Cobblemon, qui porte « Rattata l'Ancien Baron » là où customName,
-        // displayName et le nickname ne contiennent que l'espèce.
-        String titled = titledNameOf(pe);
-        if (titled != null && flatten(titled).contains(BARON_PATTERN)) return true;
-
-        // Les trois autres sources restent testées : elles ne coûtent rien et
-        // couvrent le cas où le serveur changerait de méthode de nommage.
-        if (nameMatchesBaron(pe.getCustomName())) return true;
-        if (nameMatchesBaron(pe.getDisplayName())) return true;
-        String nick = nicknameOf(pe.getPokemon());
-        return nick != null && flatten(nick).contains(BARON_PATTERN);
+        // Scan baron retiré : plus aucune lecture de nom, plus d'alerte ni de faisceau baron
+        return false;
     }
 
     /**
