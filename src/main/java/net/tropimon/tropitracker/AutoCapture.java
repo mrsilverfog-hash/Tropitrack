@@ -84,8 +84,9 @@ public final class AutoCapture {
             return;
         }
         java.util.List<PokemonEntity> list = new java.util.ArrayList<>();
-        for (Entity e : client.world.getEntities()) {
-            if (!(e instanceof PokemonEntity pe) || pe.isRemoved()) continue;
+        // Recherche limitée à la zone de lancer (au lieu de parcourir toutes les entités du monde)
+        for (PokemonEntity pe : client.world.getEntitiesByClass(PokemonEntity.class,
+                player.getBoundingBox().expand(RANGE), x -> !x.isRemoved())) {
             if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
             if (pe.getBattleId() != null) continue;
             if (!matches(pe)) continue;
@@ -142,8 +143,8 @@ public final class AutoCapture {
 
         PokemonEntity best = null;
         double bestDist = Double.MAX_VALUE;
-        for (Entity e : client.world.getEntities()) {
-            if (!(e instanceof PokemonEntity pe) || pe.isRemoved()) continue;
+        for (PokemonEntity pe : client.world.getEntitiesByClass(PokemonEntity.class,
+                player.getBoundingBox().expand(RANGE), x -> !x.isRemoved())) {
             if (pe.getOwnerUuid() != null || pe.getPokemon().getOwnerUUID() != null) continue;
             if (pe.getBattleId() != null) continue;
             if (recentlyThrownAt.containsKey(pe.getUuid())) continue;
@@ -199,11 +200,14 @@ public final class AutoCapture {
         recentlyThrownAt.put(best.getUuid(), now);
     }
 
+    /** Traductions des noms d'espèces, calculées une seule fois. */
+    private static final Map<String, String> FR_NAMES = new java.util.concurrent.ConcurrentHashMap<>();
+
     private static boolean matches(PokemonEntity pe) {
         String species = pe.getPokemon().getSpecies().getName().toLowerCase(Locale.ROOT);
         if (targets.contains(species)) return true;
-        String key = "cobblemon.species." + species + ".name";
-        String fr = net.minecraft.client.resource.language.I18n.translate(key).toLowerCase(Locale.ROOT);
+        String fr = FR_NAMES.computeIfAbsent(species, sp -> net.minecraft.client.resource.language.I18n
+            .translate("cobblemon.species." + sp + ".name").toLowerCase(Locale.ROOT));
         return targets.contains(fr);
     }
 

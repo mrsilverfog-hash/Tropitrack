@@ -274,15 +274,19 @@ public class TropiTrackerClient implements ClientModInitializer {
                         currentShinies.add(pe);
                     }
 
-                    if (isBaron(pe)) {
+                    // Calculés une seule fois par Pokémon et par scan (le test baron lit les noms par réflexion)
+                    boolean baronHere = isBaron(pe);
+                    boolean trackedHere = isTrackedMatch(pe.getPokemon());
+
+                    if (baronHere) {
                         currentBarons.add(pe);
                     }
 
-                    if (!currentShinies.contains(pe) && isTrackedMatch(pe.getPokemon())) {
+                    if (!currentShinies.contains(pe) && trackedHere) {
                         currentTracked.add(pe);
                     }
 
-                    SoundEvent detectedSound = getSpecialSound(pe);
+                    SoundEvent detectedSound = getSpecialSound(pe, baronHere, trackedHere);
 
                     if (detectedSound != null && !announcedEntities.contains(pe.getUuid())) {
                         handleSpawn(pe);
@@ -294,8 +298,8 @@ public class TropiTrackerClient implements ClientModInitializer {
                         specialFound = true;
                         foundSound = detectedSound;
                         boolean shinyMatch = pe.getPokemon().getShiny() && enableShiny;
-                        boolean baronMatch = isBaron(pe);
-                        boolean trackedMatch = isTrackedMatch(pe.getPokemon());
+                        boolean baronMatch = baronHere;
+                        boolean trackedMatch = trackedHere;
                         foundVolume = shinyMatch ? SHINY_VOLUME
                                     : (baronMatch ? BARON_VOLUME
                                     : (trackedMatch ? TRACKED_VOLUME : 1.0f));
@@ -909,6 +913,10 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private static SoundEvent getSpecialSound(PokemonEntity pe) {
+        return getSpecialSound(pe, isBaron(pe), isTrackedMatch(pe.getPokemon()));
+    }
+
+    private static SoundEvent getSpecialSound(PokemonEntity pe, boolean baron, boolean tracked) {
         Pokemon pokemon = pe.getPokemon();
 
         String speciesName = pokemon.getSpecies().getName().toLowerCase();
@@ -921,11 +929,11 @@ public class TropiTrackerClient implements ClientModInitializer {
         Set<String> labels = pokemon.getSpecies().getLabels();
         boolean isShiny = pokemon.getShiny();
 
-        if (isTracked(frLower, speciesName)) {
+        if (tracked) {
             return INCLUDED_SOUND;
         } else if (isShiny && enableShiny) {
             return SHINY_SOUND;
-        } else if (isBaron(pe)) {
+        } else if (baron) {
             return BARON_SOUND;
         } else if (enableLegendary && hasLabel(labels, LEGENDARY_LABELS)) {
             return LEGENDARY_SOUND;
