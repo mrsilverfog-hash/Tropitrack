@@ -480,10 +480,19 @@ public class TropiTrackerClient implements ClientModInitializer {
     }
 
     private static boolean isTracked(String frLower, String speciesName) {
+        // Formes normalisées en plus des noms bruts : « Nidoran♂ » -> nidoranm, « Nidoran♀ » -> nidoranf
+        String frNorm = normalizeName(frLower);
+        String spNorm = normalizeName(speciesName);
         // Espèce en capture auto : ni message, ni son, ni faisceau (juste la petite cible)
-        if (AutoCapture.isActiveFor(frLower) || AutoCapture.isActiveFor(speciesName)) return false;
-        return trackedPokemons.contains(frLower) || trackedPokemons.contains(speciesName)
-            || boardTrackedPokemons.contains(frLower) || boardTrackedPokemons.contains(speciesName);
+        if (AutoCapture.isActiveFor(frLower) || AutoCapture.isActiveFor(speciesName)
+            || AutoCapture.isActiveFor(frNorm) || AutoCapture.isActiveFor(spNorm)) return false;
+        return containsAny(trackedPokemons, frLower, speciesName, frNorm, spNorm)
+            || containsAny(boardTrackedPokemons, frLower, speciesName, frNorm, spNorm);
+    }
+
+    private static boolean containsAny(Set<String> set, String... keys) {
+        for (String k : keys) if (set.contains(k)) return true;
+        return false;
     }
 
     public static void recheckAfterBoardUpdate() {
@@ -1006,8 +1015,9 @@ public class TropiTrackerClient implements ClientModInitializer {
     static String normalizeName(String raw) {
         String n = raw.toLowerCase(java.util.Locale.ROOT).replace("♀", " f").replace("♂", " m")
             .replaceAll("\\s+", " ").trim();
-        if (n.matches("nidoran ?(f|fe|fem|femelle|female|fille)")) return "nidoranf";
-        if (n.matches("nidoran ?(m|ma|mal|male|mâle|garcon|garçon)")) return "nidoranm";
+        String k = n.replace('-', ' ').replace('_', ' ').replace(".", "").replaceAll("\\s+", " ").trim();
+        if (k.matches("nidoran ?(f|fe|fem|femelle|female|fille)")) return "nidoranf";
+        if (k.matches("nidoran ?(m|ma|mal|male|mâle|garcon|garçon)")) return "nidoranm";
         return n;
     }
 

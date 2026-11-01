@@ -205,10 +205,10 @@ public final class AutoCapture {
 
     private static boolean matches(PokemonEntity pe) {
         String species = pe.getPokemon().getSpecies().getName().toLowerCase(Locale.ROOT);
-        if (targets.contains(species)) return true;
+        if (targets.contains(species) || targets.contains(TropiTrackerClient.normalizeName(species))) return true;
         String fr = FR_NAMES.computeIfAbsent(species, sp -> net.minecraft.client.resource.language.I18n
             .translate("cobblemon.species." + sp + ".name").toLowerCase(Locale.ROOT));
-        return targets.contains(fr);
+        return targets.contains(fr) || targets.contains(TropiTrackerClient.normalizeName(fr));
     }
 
     /** Premier emplacement de la hotbar contenant une Poké Ball (PokeBallItem de Cobblemon). */
