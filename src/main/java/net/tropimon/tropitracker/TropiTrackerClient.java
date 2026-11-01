@@ -372,6 +372,11 @@ public class TropiTrackerClient implements ClientModInitializer {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.player == null) return;
 
+        // Noms difficiles à taper (Nidoran♀ / Nidoran♂) : « nidoran f », « nidoran femelle », « nidoran m »...
+        boolean autoSuffix = name.endsWith(" auto");
+        String baseName = normalizeName(autoSuffix ? name.substring(0, name.length() - 5) : name);
+        name = autoSuffix ? baseName + " auto" : baseName;
+
         // « track <nom> auto » : active / coupe la capture automatique pour cette espèce
         if (name.endsWith(" auto")) {
             String species = name.substring(0, name.length() - 5).trim();
@@ -991,6 +996,19 @@ public class TropiTrackerClient implements ClientModInitializer {
         }
         return speciesNameCache.computeIfAbsent(speciesLower, sp ->
             net.minecraft.client.resource.language.I18n.translate("cobblemon.species." + sp + ".name"));
+    }
+
+    /**
+     * Ramène les écritures faciles à taper vers le nom interne de Cobblemon :
+     * « nidoran f », « nidoran femelle », « nidoran♀ » -> nidoranf ; « nidoran m », « nidoran male »,
+     * « nidoran♂ » -> nidoranm.
+     */
+    static String normalizeName(String raw) {
+        String n = raw.toLowerCase(java.util.Locale.ROOT).replace("♀", " f").replace("♂", " m")
+            .replaceAll("\\s+", " ").trim();
+        if (n.matches("nidoran ?(f|fe|fem|femelle|female|fille)")) return "nidoranf";
+        if (n.matches("nidoran ?(m|ma|mal|male|mâle|garcon|garçon)")) return "nidoranm";
+        return n;
     }
 
     private static String capitalize(String s) {
