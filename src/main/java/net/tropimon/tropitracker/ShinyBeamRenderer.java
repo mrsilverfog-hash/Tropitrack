@@ -35,6 +35,12 @@ public class ShinyBeamRenderer {
     private static final int TRACKED_TEXT_COLOR = 0xE1AD01;
     private static final int BARON_TEXT_COLOR = 0xFF3030;
 
+    // Drones Rotom épiques / légendaires : orange vif
+    private static final float DRONE_R = 1.0f;
+    private static final float DRONE_G = 0.45f;
+    private static final float DRONE_B = 0.0f;
+    private static final int DRONE_TEXT_COLOR = 0xFF7300;
+
     public static void render(WorldRenderContext context) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client.world == null || client.player == null) return;
@@ -55,9 +61,10 @@ public class ShinyBeamRenderer {
         }
         java.util.List<PokemonEntity> autoTargets = AutoCapture.getMarked();
         java.util.Map<Integer, Vec3d> baronBlips = RadarDetector.getBaronBlips();
+        java.util.List<Vec3d> drones = DroneDetector.positions(client, context.tickCounter().getTickDelta(true));
         if (!baronBlips.isEmpty() || !shinies.isEmpty()) renderMarkers(context, client, baronBlips, shinies);
         if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
-                && hideouts.isEmpty() && autoTargets.isEmpty() && baronBlips.isEmpty()) return;
+                && hideouts.isEmpty() && autoTargets.isEmpty() && baronBlips.isEmpty() && drones.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -83,6 +90,7 @@ public class ShinyBeamRenderer {
         appendPositionBeams(buffer, viewMatrix, farShinies, camPos, playerEyes, SHINY_R, SHINY_G, SHINY_B);
         appendBeams(buffer, viewMatrix, tracked, camPos, playerEyes, tickDelta, TRACKED_R, TRACKED_G, TRACKED_B);
         appendPositionBeams(buffer, viewMatrix, farHunt, camPos, playerEyes, TRACKED_R, TRACKED_G, TRACKED_B);
+        appendPositionBeams(buffer, viewMatrix, drones, camPos, playerEyes, DRONE_R, DRONE_G, DRONE_B);
 
         drawIfNotEmpty(buffer);
 
@@ -137,6 +145,9 @@ public class ShinyBeamRenderer {
         drawIconsOnEntities(context, client, camera, camPos, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR);
         drawIconsAtPositions(context, client, camera, camPos, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR);
         drawIconsAtPositions(context, client, camera, camPos, farShinies, "\u2728", SHINY_TEXT_COLOR);
+        // Drones Rotom épiques / légendaires : distance en bas, petit carré orange au centre
+        drawPositionLabels(context, client, camera, camPos, playerEyes, drones, "", DRONE_TEXT_COLOR, 72);
+        drawIconsAtPositions(context, client, camera, camPos, drones, "\u25A0", DRONE_TEXT_COLOR);
         drawOutlinedLabels(context, client, camera, camPos, playerEyes, shinyHideouts, "\uD83C\uDF3F", 60);
 
         RenderSystem.enableDepthTest();

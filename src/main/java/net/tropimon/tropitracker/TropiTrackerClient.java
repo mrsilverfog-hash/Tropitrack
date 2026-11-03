@@ -157,6 +157,7 @@ public class TropiTrackerClient implements ClientModInitializer {
         RadarDetector.register();
         RustlingDetector.register();
         AutoCapture.register();
+        DroneDetector.register();
 
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.world == null) return;

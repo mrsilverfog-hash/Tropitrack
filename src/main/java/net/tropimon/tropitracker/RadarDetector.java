@@ -47,6 +47,8 @@ public class RadarDetector {
     private static volatile List<Vec3d> farHuntPositions = new ArrayList<>();
     /** Barons repérés au radar (icône rouge « alpha ») : identifiant d'entité -> position du blip. */
     private static volatile Map<Integer, Vec3d> baronBlips = new HashMap<>();
+    /** Drones Rotom épiques / légendaires du radar : identifiant d'entité -> position du blip. */
+    private static volatile Map<Integer, Vec3d> droneBlips = new HashMap<>();
 
     public static void register() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
@@ -54,6 +56,7 @@ public class RadarDetector {
                 farShinyPositions = new ArrayList<>();
                 farHuntPositions = new ArrayList<>();
                 baronBlips = new HashMap<>();
+                droneBlips = new HashMap<>();
                 return;
             }
             if (++tick < POLL_INTERVAL_TICKS) return;
@@ -87,6 +90,10 @@ public class RadarDetector {
         return baronBlips;
     }
 
+    public static Map<Integer, Vec3d> getDroneBlips() {
+        return droneBlips;
+    }
+
     private static void poll(MinecraftClient client) throws Exception {
         if (!resolved) {
             resolved = true;
@@ -107,6 +114,7 @@ public class RadarDetector {
             farShinyPositions = new ArrayList<>();
             farHuntPositions = new ArrayList<>();
             baronBlips = new HashMap<>();
+            droneBlips = new HashMap<>();
             return;
         }
 
@@ -119,11 +127,20 @@ public class RadarDetector {
         // Les cachettes shiny apparaissent aussi au radar : elles ont leur propre alerte et faisceau
         Set<Integer> spotIds = RustlingDetector.currentRadarIds();
         Map<Integer, Vec3d> barons = new HashMap<>();
+        Map<Integer, Vec3d> drones = new HashMap<>();
 
         for (Object blip : blips) {
             if (blip == null) continue;
             Object icon = call(blip, "icon");
             String iconId = icon == null ? "" : String.valueOf(call(icon, "id"));
+            // Drones Rotom épique (violet) et légendaire (orange)
+            if (iconId.equals("motismadrone_ultrarare") || iconId.equals("motismadrone_legendary")
+                    || iconId.equals("motismadrone_epic")) {
+                drones.put(((Number) call(blip, "entityId")).intValue(),
+                    new Vec3d(((Number) call(blip, "x")).intValue() + 0.5,
+                        ((Number) call(blip, "y")).intValue(), ((Number) call(blip, "z")).intValue() + 0.5));
+                continue;
+            }
             // Icône rouge « alpha » (et ses variantes legendary_alpha, shiny_alpha...) = baron
             if (iconId.contains("alpha")) {
                 int bid = ((Number) call(blip, "entityId")).intValue();
@@ -175,6 +192,7 @@ public class RadarDetector {
         farShinyPositions = far;
         farHuntPositions = farHunt;
         baronBlips = barons;
+        droneBlips = drones;
     }
 
     /**
