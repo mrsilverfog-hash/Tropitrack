@@ -95,15 +95,6 @@ public class ShinyBeamRenderer {
             RenderSystem.lineWidth(2.0f);
         }
 
-        // --- Pokémon suivis (track ou chasse, hors capture auto) : petite cible jaune moutarde au centre ---
-        if (!tracked.isEmpty()) {
-            RenderSystem.lineWidth(2.5f);
-            BufferBuilder reticle = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
-            appendReticles(reticle, viewMatrix, tracked, camera, camPos, tickDelta, TRACKED_R, TRACKED_G, TRACKED_B);
-            drawIfNotEmpty(reticle);
-            RenderSystem.lineWidth(2.0f);
-        }
-
         // --- Cachettes (rustling spots) : faisceau blanc à contour noir, lisible sur la neige ---
         if (!hideouts.isEmpty()) {
             // Faisceau vers le joueur (cachettes shiny uniquement) : visible à travers les blocs
@@ -138,7 +129,8 @@ public class ShinyBeamRenderer {
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, shinies, "\u2728", SHINY_TEXT_COLOR, 0);
         drawLabels(context, client, camera, camPos, playerEyes, tickDelta, barons,  "\uD83D\uDC51", BARON_TEXT_COLOR, 12);
         drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "\u2728", SHINY_TEXT_COLOR, 24);
-        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 36);
+        // Pokémon suivis : la cible 🎯 et la distance posées sur le centre du Pokémon lui-même
+        drawIconsOnEntities(context, client, camera, camPos, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR);
         drawPositionLabels(context, client, camera, camPos, playerEyes, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 48);
         drawOutlinedLabels(context, client, camera, camPos, playerEyes, shinyHideouts, "\uD83C\uDF3F", 60);
 
@@ -428,6 +420,39 @@ public class ShinyBeamRenderer {
      * yOffset décale la ligne de texte : les barons s'affichent sous les shiny
      * pour rester lisibles quand un Pokémon cumule les deux.
      */
+    /** Icône centrée sur le Pokémon (taille constante à l'écran), distance juste en dessous, visible à travers les blocs. */
+    private static void drawIconsOnEntities(WorldRenderContext context, MinecraftClient client, Camera camera,
+                                            Vec3d camPos, float tickDelta, Set<PokemonEntity> entities,
+                                            String icon, int color) {
+        if (entities.isEmpty()) return;
+        TextRenderer textRenderer = client.textRenderer;
+        MatrixStack matrices = context.matrixStack();
+        Vec3d eyes = client.player.getEyePos();
+        for (PokemonEntity pe : entities) {
+            if (pe == null || pe.isRemoved()) continue;
+            Vec3d center = centerOf(pe, tickDelta);
+            double dist = center.distanceTo(eyes);
+            Vec3d rel = center.subtract(camPos);
+            float scale = (float) Math.max(0.02, rel.length() * 0.0032);
+
+            matrices.push();
+            matrices.translate(rel.x, rel.y, rel.z);
+            matrices.multiply(camera.getRotation());
+            matrices.scale(scale, -scale, scale);
+            Matrix4f m = matrices.peek().getPositionMatrix();
+
+            int w = textRenderer.getWidth(icon);
+            textRenderer.draw(icon, -w / 2f, -textRenderer.fontHeight / 2f, color, true, m,
+                client.getBufferBuilders().getEntityVertexConsumers(), TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
+            String d = (int) dist + "m";
+            int dw = textRenderer.getWidth(d);
+            textRenderer.draw(d, -dw / 2f, textRenderer.fontHeight / 2f + 1, color, true, m,
+                client.getBufferBuilders().getEntityVertexConsumers(), TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
+            client.getBufferBuilders().getEntityVertexConsumers().draw();
+            matrices.pop();
+        }
+    }
+
     private static void drawLabels(WorldRenderContext context, MinecraftClient client, Camera camera,
                                    Vec3d camPos, Vec3d playerEyes, float tickDelta,
                                    Set<PokemonEntity> entities, String icon, int color, int yOffset) {
