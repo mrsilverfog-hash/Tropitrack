@@ -95,6 +95,15 @@ public class ShinyBeamRenderer {
             RenderSystem.lineWidth(2.0f);
         }
 
+        // --- Pokémon suivis (track ou chasse, hors capture auto) : petite cible jaune moutarde au centre ---
+        if (!tracked.isEmpty()) {
+            RenderSystem.lineWidth(2.5f);
+            BufferBuilder reticle = tessellator.begin(VertexFormat.DrawMode.DEBUG_LINES, VertexFormats.POSITION_COLOR);
+            appendReticles(reticle, viewMatrix, tracked, camera, camPos, tickDelta, TRACKED_R, TRACKED_G, TRACKED_B);
+            drawIfNotEmpty(reticle);
+            RenderSystem.lineWidth(2.0f);
+        }
+
         // --- Cachettes (rustling spots) : faisceau blanc à contour noir, lisible sur la neige ---
         if (!hideouts.isEmpty()) {
             // Faisceau vers le joueur (cachettes shiny uniquement) : visible à travers les blocs
@@ -243,14 +252,18 @@ public class ShinyBeamRenderer {
     }
 
     /** Petit réticule (cercle + 4 traits) face à la caméra, centré sur le Pokémon. */
-    private static void appendReticles(BufferBuilder buffer, Matrix4f viewMatrix, java.util.List<PokemonEntity> entities,
+    private static void appendReticles(BufferBuilder buffer, Matrix4f viewMatrix, java.util.Collection<PokemonEntity> entities,
                                        Camera camera, Vec3d camPos, float tickDelta) {
+        appendReticles(buffer, viewMatrix, entities, camera, camPos, tickDelta, 1.0f, 0.15f, 0.15f);
+    }
+
+    private static void appendReticles(BufferBuilder buffer, Matrix4f viewMatrix, java.util.Collection<PokemonEntity> entities,
+                                       Camera camera, Vec3d camPos, float tickDelta, float r, float g, float b) {
         // Deux axes perpendiculaires au regard, calculés depuis l'orientation de la caméra
         double yaw = Math.toRadians(camera.getYaw()), pitch = Math.toRadians(camera.getPitch());
         Vec3d fwd = new Vec3d(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
         Vec3d l = new Vec3d(Math.cos(yaw), 0, Math.sin(yaw)).normalize();
         Vec3d u = l.crossProduct(fwd).normalize();
-        final float r = 1.0f, g = 0.15f, b = 0.15f;
         final int SEG = 20;
         for (PokemonEntity pe : entities) {
             if (pe == null || pe.isRemoved()) continue;
