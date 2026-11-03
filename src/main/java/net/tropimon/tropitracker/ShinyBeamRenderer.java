@@ -57,7 +57,7 @@ public class ShinyBeamRenderer {
         java.util.Map<Integer, Vec3d> baronBlips = RadarDetector.getBaronBlips();
         if (!baronBlips.isEmpty() || !shinies.isEmpty()) renderMarkers(context, client, baronBlips, shinies);
         if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
-                && hideouts.isEmpty() && autoTargets.isEmpty()) return;
+                && hideouts.isEmpty() && autoTargets.isEmpty() && baronBlips.isEmpty()) return;
 
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
@@ -126,12 +126,17 @@ public class ShinyBeamRenderer {
         }
 
         // --- Textes de distance flottants devant le joueur, visibles à travers les blocs ---
-        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, shinies, "\u2728", SHINY_TEXT_COLOR, 0);
-        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, barons,  "\uD83D\uDC51", BARON_TEXT_COLOR, 12);
-        drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "\u2728", SHINY_TEXT_COLOR, 24);
-        // Pokémon suivis : la cible 🎯 et la distance posées sur le centre du Pokémon lui-même
+        // Distances en bas (devant le joueur) ; les symboles sont posés sur le centre des Pokémon
+        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, shinies, "", SHINY_TEXT_COLOR, 0);
+        drawPositionLabels(context, client, camera, camPos, playerEyes, farShinies, "", SHINY_TEXT_COLOR, 24);
+        drawLabels(context, client, camera, camPos, playerEyes, tickDelta, tracked, "", TRACKED_TEXT_COLOR, 36);
+        drawPositionLabels(context, client, camera, camPos, playerEyes, farHunt, "", TRACKED_TEXT_COLOR, 48);
+        java.util.List<Vec3d> baronCenters = baronCenters(client, tickDelta);
+        drawPositionLabels(context, client, camera, camPos, playerEyes, baronCenters, "", BARON_TEXT_COLOR, 12);
+        // Symboles au centre : 🎯 pour les Pokémon suivis (chargés ou repérés au radar), ✨ pour les shiny du radar
         drawIconsOnEntities(context, client, camera, camPos, tickDelta, tracked, "\uD83C\uDFAF", TRACKED_TEXT_COLOR);
-        drawPositionLabels(context, client, camera, camPos, playerEyes, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR, 48);
+        drawIconsAtPositions(context, client, camera, camPos, farHunt, "\uD83C\uDFAF", TRACKED_TEXT_COLOR);
+        drawIconsAtPositions(context, client, camera, camPos, farShinies, "\u2728", SHINY_TEXT_COLOR);
         drawOutlinedLabels(context, client, camera, camPos, playerEyes, shinyHideouts, "\uD83C\uDF3F", 60);
 
         RenderSystem.enableDepthTest();
@@ -360,7 +365,7 @@ public class ShinyBeamRenderer {
         int line = 0;
         for (Vec3d target : positions) {
             double dist = target.distanceTo(playerEyes);
-            String label = icon + " " + (int) dist + "m (radar)";
+            String label = (icon.isEmpty() ? "" : icon + " ") + (int) dist + "m (radar)";
 
             Vec3d direction2 = target.subtract(playerEyes).normalize();
             Vec3d labelPos = playerEyes.add(direction2.multiply(1.5));
@@ -420,7 +425,39 @@ public class ShinyBeamRenderer {
      * yOffset décale la ligne de texte : les barons s'affichent sous les shiny
      * pour rester lisibles quand un Pokémon cumule les deux.
      */
-    /** Icône centrée sur le Pokémon (taille constante à l'écran), distance juste en dessous, visible à travers les blocs. */
+    /** Barons du radar : centre du Pokémon s'il est chargé, sinon position du blip. */
+    private static java.util.List<Vec3d> baronCenters(MinecraftClient client, float tickDelta) {
+        java.util.List<Vec3d> out = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<Integer, Vec3d> e : RadarDetector.getBaronBlips().entrySet()) {
+            net.minecraft.entity.Entity ent = client.world.getEntityById(e.getKey());
+            out.add(ent != null && !ent.isRemoved() ? centerOf(ent, tickDelta) : e.getValue().add(0, 0.5, 0));
+        }
+        return out;
+    }
+
+    /** Icône posée sur des positions du radar (Pokémon pas encore chargé). */
+    private static void drawIconsAtPositions(WorldRenderContext context, MinecraftClient client, Camera camera,
+                                             Vec3d camPos, java.util.List<Vec3d> positions, String icon, int color) {
+        if (positions.isEmpty()) return;
+        TextRenderer textRenderer = client.textRenderer;
+        MatrixStack matrices = context.matrixStack();
+        for (Vec3d pos : positions) {
+            Vec3d rel = pos.subtract(camPos);
+            float scale = (float) Math.max(0.02, rel.length() * 0.0032);
+            matrices.push();
+            matrices.translate(rel.x, rel.y, rel.z);
+            matrices.multiply(camera.getRotation());
+            matrices.scale(scale, -scale, scale);
+            Matrix4f m = matrices.peek().getPositionMatrix();
+            int w = textRenderer.getWidth(icon);
+            textRenderer.draw(icon, -w / 2f, -textRenderer.fontHeight / 2f, color, true, m,
+                client.getBufferBuilders().getEntityVertexConsumers(), TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
+            client.getBufferBuilders().getEntityVertexConsumers().draw();
+            matrices.pop();
+        }
+    }
+
+    /** Icône centrée sur le Pokémon (taille constante à l'écran), visible à travers les blocs. */
     private static void drawIconsOnEntities(WorldRenderContext context, MinecraftClient client, Camera camera,
                                             Vec3d camPos, float tickDelta, Set<PokemonEntity> entities,
                                             String icon, int color) {
@@ -431,7 +468,6 @@ public class ShinyBeamRenderer {
         for (PokemonEntity pe : entities) {
             if (pe == null || pe.isRemoved()) continue;
             Vec3d center = centerOf(pe, tickDelta);
-            double dist = center.distanceTo(eyes);
             Vec3d rel = center.subtract(camPos);
             float scale = (float) Math.max(0.02, rel.length() * 0.0032);
 
@@ -443,10 +479,6 @@ public class ShinyBeamRenderer {
 
             int w = textRenderer.getWidth(icon);
             textRenderer.draw(icon, -w / 2f, -textRenderer.fontHeight / 2f, color, true, m,
-                client.getBufferBuilders().getEntityVertexConsumers(), TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
-            String d = (int) dist + "m";
-            int dw = textRenderer.getWidth(d);
-            textRenderer.draw(d, -dw / 2f, textRenderer.fontHeight / 2f + 1, color, true, m,
                 client.getBufferBuilders().getEntityVertexConsumers(), TextRenderer.TextLayerType.SEE_THROUGH, 0, 0xF000F0);
             client.getBufferBuilders().getEntityVertexConsumers().draw();
             matrices.pop();
@@ -466,7 +498,7 @@ public class ShinyBeamRenderer {
 
             Vec3d entityCenter = pe.getLerpedPos(tickDelta).add(0, pe.getHeight() / 2.0, 0);
             double dist = entityCenter.distanceTo(playerEyes);
-            String label = icon + " " + (int) dist + "m";
+            String label = (icon.isEmpty() ? "" : icon + " ") + (int) dist + "m";
 
             Vec3d direction2 = entityCenter.subtract(playerEyes).normalize();
             Vec3d labelPos = playerEyes.add(direction2.multiply(1.5));
