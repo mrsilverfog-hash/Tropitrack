@@ -365,7 +365,7 @@ public class ShinyBeamRenderer {
         int line = 0;
         for (Vec3d target : positions) {
             double dist = target.distanceTo(playerEyes);
-            String label = (icon.isEmpty() ? "" : icon + " ") + (int) dist + "m (radar)";
+            String label = (icon.isEmpty() ? "" : icon + " ") + (int) dist + "m";
 
             Vec3d direction2 = target.subtract(playerEyes).normalize();
             Vec3d labelPos = playerEyes.add(direction2.multiply(1.5));
