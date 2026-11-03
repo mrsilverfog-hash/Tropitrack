@@ -55,7 +55,7 @@ public class ShinyBeamRenderer {
         }
         java.util.List<PokemonEntity> autoTargets = AutoCapture.getMarked();
         java.util.Map<Integer, Vec3d> baronBlips = RadarDetector.getBaronBlips();
-        if (!baronBlips.isEmpty()) renderBaronMarkers(context, client, baronBlips);
+        if (!baronBlips.isEmpty() || !shinies.isEmpty()) renderMarkers(context, client, baronBlips, shinies);
         if (shinies.isEmpty() && barons.isEmpty() && farShinies.isEmpty() && tracked.isEmpty() && farHunt.isEmpty()
                 && hideouts.isEmpty() && autoTargets.isEmpty()) return;
 
@@ -155,8 +155,19 @@ public class ShinyBeamRenderer {
      * Barons du radar : losange rouge à contour noir au-dessus du Pokémon (ou de la position du blip
      * s'il n'est pas encore chargé), visible à travers les blocs, taille constante à l'écran.
      */
-    private static void renderBaronMarkers(WorldRenderContext context, MinecraftClient client,
-                                           java.util.Map<Integer, Vec3d> blips) {
+    /** Centre réel du Pokémon : milieu de sa boîte de collision, à la position affichée. */
+    static Vec3d centerOf(net.minecraft.entity.Entity e, float tickDelta) {
+        net.minecraft.util.math.Box box = e.getBoundingBox();
+        return e.getLerpedPos(tickDelta).add(0, (box.maxY - box.minY) / 2.0, 0);
+    }
+
+    /**
+     * Symboles posés sur le centre des Pokémon, visibles à travers les blocs, taille constante à l'écran :
+     *  - barons du radar : losange rouge à contour noir ;
+     *  - shiny : petite étoile rose à contour noir.
+     */
+    private static void renderMarkers(WorldRenderContext context, MinecraftClient client,
+                                      java.util.Map<Integer, Vec3d> blips, Set<PokemonEntity> shinies) {
         Camera camera = context.camera();
         Vec3d camPos = camera.getPos();
         float tickDelta = context.tickCounter().getTickDelta(true);
@@ -177,16 +188,23 @@ public class ShinyBeamRenderer {
         BufferBuilder buf = Tessellator.getInstance().begin(VertexFormat.DrawMode.TRIANGLES, VertexFormats.POSITION_COLOR);
         for (java.util.Map.Entry<Integer, Vec3d> e : blips.entrySet()) {
             net.minecraft.entity.Entity ent = client.world.getEntityById(e.getKey());
-            Vec3d top;
+            Vec3d center;
             if (ent != null && !ent.isRemoved()) {
-                top = ent.getLerpedPos(tickDelta).add(0, ent.getHeight() + 0.6, 0);
+                center = centerOf(ent, tickDelta);
             } else {
-                top = e.getValue().add(0, 1.6, 0);
+                center = e.getValue().add(0, 0.5, 0);
             }
-            Vec3d c = top.subtract(camPos);
-            double size = 0.18 + c.length() * 0.018;   // garde à peu près la même taille à l'écran
+            Vec3d c = center.subtract(camPos);
+            double size = (0.18 + c.length() * 0.018) * 0.9;   // taille constante à l'écran, -10 %
             appendDiamond(buf, viewMatrix, c, l, u, size * 1.35, 0f, 0f, 0f);        // contour noir
             appendDiamond(buf, viewMatrix, c.subtract(fwd.multiply(0.01)), l, u, size, 1f, 0.1f, 0.1f); // cœur rouge
+        }
+        for (PokemonEntity pe : shinies) {
+            if (pe == null || pe.isRemoved()) continue;
+            Vec3d c = centerOf(pe, tickDelta).subtract(camPos);
+            double size = (0.18 + c.length() * 0.018) * 0.85;
+            appendStar(buf, viewMatrix, c, l, u.multiply(-1), size * 1.35, 0f, 0f, 0f);                        // contour noir
+            appendStar(buf, viewMatrix, c.subtract(fwd.multiply(0.01)), l, u.multiply(-1), size, 1f, 0.08f, 0.8f); // rose shiny
         }
         drawIfNotEmpty(buf);
 
@@ -194,6 +212,22 @@ public class ShinyBeamRenderer {
         RenderSystem.enableCull();
         RenderSystem.depthMask(true);
         RenderSystem.disableBlend();
+    }
+
+    /** Étoile à 5 branches face à la caméra (éventail de triangles depuis le centre). */
+    private static void appendStar(BufferBuilder buf, Matrix4f m, Vec3d c, Vec3d l, Vec3d u, double r,
+                                   float cr, float cg, float cb) {
+        Vec3d[] pts = new Vec3d[10];
+        for (int i = 0; i < 10; i++) {
+            double a = Math.PI / 2 + i * Math.PI / 5;
+            double rad = (i % 2 == 0) ? r : r * 0.45;
+            pts[i] = c.add(l.multiply(-Math.cos(a) * rad)).add(u.multiply(Math.sin(a) * rad));
+        }
+        for (int i = 0; i < 10; i++) {
+            vtx(buf, m, c, cr, cg, cb);
+            vtx(buf, m, pts[i], cr, cg, cb);
+            vtx(buf, m, pts[(i + 1) % 10], cr, cg, cb);
+        }
     }
 
     private static void appendDiamond(BufferBuilder buf, Matrix4f m, Vec3d c, Vec3d l, Vec3d u, double r,
@@ -220,7 +254,7 @@ public class ShinyBeamRenderer {
         final int SEG = 20;
         for (PokemonEntity pe : entities) {
             if (pe == null || pe.isRemoved()) continue;
-            Vec3d c = pe.getLerpedPos(tickDelta).add(0, pe.getHeight() / 2.0, 0).subtract(camPos);
+            Vec3d c = centerOf(pe, tickDelta).subtract(camPos);
             double rad = Math.max(0.25, Math.min(0.6, Math.max(pe.getWidth(), pe.getHeight()) * 0.35));
             for (int i = 0; i < SEG; i++) {
                 double a0 = 2 * Math.PI * i / SEG, a1 = 2 * Math.PI * (i + 1) / SEG;
